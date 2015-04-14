@@ -1,17 +1,25 @@
+
+ifeq ($(wildcard /Library),) 
+
 BOOST = /scratch/olson/boost
-#BOOST = /Users/olson/c++/boost
+STDCPP = -std=c++0x 
+THREADLIB = -lpthread
+
+else 
+
+BOOST = /Users/olson/c++/boost
+STDCPP = -stdlib=libc++ -std=gnu++11  
+
+endif
 
 default: kc
-OPT = -O2
 
-STDCPP = -std=c++0x 
-#STDCPP = -stdlib=libc++ -std=gnu++11  
+OPT = -O2
 
 CXXFLAGS = $(STDCPP) -I$(BOOST)/include  $(OPT)
 
-LDFLAGS  = -L/Users/olson/c++/boost/lib 
+LDFLAGS  =
 
-THREADLIB = -lpthread
 
 LIBS = $(BOOST)/lib/libboost_system.a $(BOOST)/lib/libboost_filesystem.a $(THREADLIB)
 
