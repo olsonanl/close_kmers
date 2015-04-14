@@ -1,3 +1,6 @@
+#ifndef _KMER_H
+#define _KMER_H
+
 /*
  * Kmer to peg mapping database
  */
@@ -26,3 +29,5 @@ public:
     std::string decode_id(encoded_id_t id);
 };
 
+
+#endif

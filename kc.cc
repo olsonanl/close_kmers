@@ -8,6 +8,7 @@
 #include <boost/filesystem.hpp>
 
 #include "kmer.h"
+#include "kserver.h"
 
 using namespace boost::filesystem;
 using boost::asio::ip::tcp;
@@ -183,6 +184,8 @@ private:
 			    std::cout << peg << ": " << it->second  << "\n";
 			}
 
+			socket_.close();
+			return;
 		    }
 		    else
 		    {
@@ -214,11 +217,11 @@ private:
 
 int main(int argc, char* argv[])
 {
-    KmerPegMapping mapping("/scratch/olson/core.kmers.2015-0406/Data.2");
-    //KmerPegMapping mapping("/Users/olson/kmer/Data.2");
+    //KmerPegMapping mapping("/scratch/olson/core.kmers.2015-0406/Data.2");
+    KmerPegMapping mapping("/Users/olson/kmer/Data.2");
 
-    path data_dir("/scratch/olson/core.kmers.2015-0406/peg.kmers");
-    //path data_dir("/Users/olson/kmer/xx");
+    //path data_dir("/scratch/olson/core.kmers.2015-0406/peg.kmers");
+    path data_dir("/Users/olson/kmer/xx");
 
     if (is_directory(data_dir))
     {
@@ -245,6 +248,8 @@ int main(int argc, char* argv[])
 	  }
 
 	  boost::asio::io_service io_service;
+
+	  KmerRequestServer kserver(io_service, "5100");
 
 	  std::ifstream ifile(argv[3]);
 	  
