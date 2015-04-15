@@ -47,7 +47,7 @@ private:
     boost::asio::io_service &io_service_;
     boost::asio::ip::tcp::socket socket_;
     boost::asio::streambuf request_;
-    KmerPegMapping mapping_;
+    KmerPegMapping &mapping_;
     boost::asio::ip::tcp::endpoint klookup_endpoint_;
     KmerLookupClient *klookup_;
     std::istream *krequest_;

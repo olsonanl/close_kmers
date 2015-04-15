@@ -2,6 +2,7 @@
 #include "kserver.h"
 
 #include <boost/asio.hpp>
+#include <boost/bind.hpp>
 #include <iostream>
 #include "global.h"
 
@@ -41,35 +42,40 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 
 void KmerRequestServer::do_accept()
 {
+    std::cout << "start allocate request obj " << g_timer.format();
     KmerRequest *r = new KmerRequest(io_service_, mapping_, klookup_endpoint_);
+    std::cout << "finish allocate request obj " << g_timer.format();
     acceptor_.async_accept(r->socket(),
-			   [r, this](boost::system::error_code ec)
-			   {
-			       std::cout << "ACCEPT\n";
-			       g_timer.start();
-			       std::cout << "at start " << g_timer.format();
-			       // Check whether the server was stopped by a signal before this
-			       // completion handler had a chance to run.
-			       if (!acceptor_.is_open())
-			       {
-				   std::cout << "not open\n";
-				   return;
-			       }
+			   boost::bind(&KmerRequestServer::on_accept, this,
+				       boost::asio::placeholders::error, r));
+}
 
-			       if (!ec)
-			       {
-				   /*
-				    * Connection has come in.
-				    * Begin parsing the request line and headers.
-				    */
-
-				   std::cout << "just before do_read " << g_timer.format();
-				   // active_.insert(r);
-				   r->do_read();
-			       }
-
-			       do_accept();
-			   });
+void KmerRequestServer::on_accept(boost::system::error_code ec, KmerRequest *r)
+{
+    std::cout << "ACCEPT\n";
+    g_timer.start();
+    std::cout << "at start " << g_timer.format();
+    // Check whether the server was stopped by a signal before this
+    // completion handler had a chance to run.
+    if (!acceptor_.is_open())
+    {
+	std::cout << "not open\n";
+	return;
+    }
+    
+    if (!ec)
+    {
+	/*
+	 * Connection has come in.
+	 * Begin parsing the request line and headers.
+	 */
+	
+	std::cout << "just before do_read " << g_timer.format();
+	// active_.insert(r);
+	r->do_read();
+    }
+    
+    do_accept();
 }
 
 void KmerRequestServer::do_await_stop()

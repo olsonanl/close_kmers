@@ -26,6 +26,7 @@ public:
 private:
 
     void do_accept();
+    void on_accept(boost::system::error_code ec, KmerRequest *);
     
     void do_await_stop();
     boost::asio::io_service &io_service_;
@@ -33,7 +34,7 @@ private:
     boost::asio::signal_set signals_;
     std::string port_;
     std::set<KmerRequest *> active_;
-    KmerPegMapping mapping_;
+    KmerPegMapping &mapping_;
     boost::asio::ip::tcp::endpoint klookup_endpoint_;
 };
 
