@@ -1,3 +1,4 @@
+
 #include <iostream>
 #include <fstream>
 #include <istream>
@@ -8,6 +9,7 @@
 #include <boost/filesystem.hpp>
 
 #include "klookup.h"
+#include "global.h"
 
 using namespace boost::filesystem;
 using boost::asio::ip::tcp;
@@ -34,6 +36,8 @@ KmerLookupClient::KmerLookupClient(boost::asio::io_service& io_service,
 {
     std::ostream request_stream(&request_);
     request_stream << "-d 1 -a\n";
+
+    timer_.start();
     
     boost::asio::async_connect(socket_, &endpoint,
 			       boost::bind(&KmerLookupClient::handle_connect, this,
@@ -44,6 +48,8 @@ void KmerLookupClient::handle_connect(const boost::system::error_code& err)
 {
     if (!err)
     {
+
+	std::cout << "elapsed at connect " << g_timer.format();
 	// The connection was successful. Send the request.
 	boost::asio::async_write(socket_, request_,
 				 boost::bind(&KmerLookupClient::handle_write_request, this,
@@ -75,6 +81,7 @@ void KmerLookupClient::handle_write_request(const boost::system::error_code& err
 	if (!input_)
 	{
 	    std::cout << "all done reading\n";
+	    std::cout << "elapsed at read " << g_timer.format();
 	    
 	    std::ostream request_stream(&request_);
 	    request_stream << ">FLUSH\n";
@@ -122,7 +129,7 @@ void KmerLookupClient::handle_read(const boost::system::error_code& err, size_t 
     if (!err)
     {
 //		std::cout << "Handle read " << bytes_transferred << ":\n";
-	
+
 	std::istream resp(&response_);
 	std::string line;
 	if (std::getline(resp, line, '\n'))
@@ -167,6 +174,7 @@ void KmerLookupClient::handle_read(const boost::system::error_code& err, size_t 
 		    std::cout << it->first << ": " << it->second  << "\n";
 		}
 
+		std::cout << "at receipt of finished results " << g_timer.format();
 		socket_.close();
 		on_completion_(vec);
 		return;
@@ -176,7 +184,6 @@ void KmerLookupClient::handle_read(const boost::system::error_code& err, size_t 
 		std::cout << line << "\n";
 	    }
 	}
-	
 	boost::asio::async_read_until(socket_, response_, "\n",
 				      boost::bind(&KmerLookupClient::handle_read, this,
 						  boost::asio::placeholders::error,

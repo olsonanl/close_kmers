@@ -15,13 +15,17 @@ endif
 default: kc
 
 OPT = -O2
-OPT = -g
+OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
 CXXFLAGS = $(STDCPP) -I$(BOOST)/include  $(OPT)
 
 LDFLAGS  =
 
-LIBS = $(BOOST)/lib/libboost_system.a $(BOOST)/lib/libboost_filesystem.a $(THREADLIB)
+LIBS = $(BOOST)/lib/libboost_system.a \
+	$(BOOST)/lib/libboost_filesystem.a \
+	$(BOOST)/lib/libboost_timer.a \
+	$(BOOST)/lib/libboost_chrono.a \
+	$(THREADLIB)
 
 x: x.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)

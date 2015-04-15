@@ -10,6 +10,7 @@
 #include <vector>
 #include <string>
 #include <boost/asio.hpp>
+#include <boost/timer/timer.hpp>
 #include "kmer.h"
 #include "klookup.h"
 
@@ -19,6 +20,7 @@ public:
     KmerRequest(boost::asio::io_service &io_service,
 		KmerPegMapping &mapping,
 		boost::asio::ip::tcp::endpoint &klookup_endpoint);
+    ~KmerRequest();
 
     void do_read();
 
@@ -35,6 +37,8 @@ private:
 
     void process_request();
     void request_complete( const KmerLookupClient::result_t &);
+
+    void write_response_complete(boost::system::error_code err);
     
     std::string request_type_;
     std::string path_;
@@ -47,6 +51,8 @@ private:
     boost::asio::ip::tcp::endpoint klookup_endpoint_;
     KmerLookupClient *klookup_;
     std::istream *krequest_;
+    boost::asio::streambuf response_;
+    boost::timer::cpu_timer timer_;
 };
 
 

@@ -3,6 +3,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/function.hpp>
+#include <boost/timer/timer.hpp>
 #include <iostream>
 #include <string>
 #include "kmer.h"
@@ -39,6 +40,7 @@ private:
     std::map<KmerPegMapping::encoded_id_t, unsigned int> hit_count_;
 
     boost::function<void ( const result_t & )> on_completion_;
+    boost::timer::cpu_timer timer_;
 };
 
 

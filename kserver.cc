@@ -3,6 +3,7 @@
 
 #include <boost/asio.hpp>
 #include <iostream>
+#include "global.h"
 
 KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 				     const std::string &port,
@@ -34,6 +35,7 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
     acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
     acceptor_.bind(endpoint);
     acceptor_.listen();
+    std::cout << "Listening on " << endpoint << "\n";
     do_accept();
 }
 
@@ -43,6 +45,9 @@ void KmerRequestServer::do_accept()
     acceptor_.async_accept(r->socket(),
 			   [r, this](boost::system::error_code ec)
 			   {
+			       std::cout << "ACCEPT\n";
+			       g_timer.start();
+			       std::cout << "at start " << g_timer.format();
 			       // Check whether the server was stopped by a signal before this
 			       // completion handler had a chance to run.
 			       if (!acceptor_.is_open())
@@ -58,7 +63,8 @@ void KmerRequestServer::do_accept()
 				    * Begin parsing the request line and headers.
 				    */
 
-				   active_.insert(r);
+				   std::cout << "just before do_read " << g_timer.format();
+				   // active_.insert(r);
 				   r->do_read();
 			       }
 

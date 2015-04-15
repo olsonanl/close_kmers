@@ -7,6 +7,9 @@
 #include <boost/bind.hpp>
 #include <boost/filesystem.hpp>
 
+#define DEFINE_GLOBALS 1
+#include "global.h"
+
 #include "kmer.h"
 #include "kserver.h"
 #include "klookup.h"
