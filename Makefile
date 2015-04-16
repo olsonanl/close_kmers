@@ -16,7 +16,8 @@ endif
 default: kser
 
 OPT = -O2
-OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
+OPT = -g
+# OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
 INC = -I$(BOOST)/include 
 
@@ -43,7 +44,7 @@ kser: kser.o kmer.o kserver.o krequest.o klookup.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean:
-	rm *.o kc
+	rm -f *.o kc kser
 
 # DO NOT DELETE
 
