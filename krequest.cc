@@ -204,4 +204,6 @@ void KmerRequest::write_response_complete(boost::system::error_code err)
     std::cout << "Finished writing response " << g_timer.format() << "\n";
 
     socket_.close();
+
+    delete this;
 }

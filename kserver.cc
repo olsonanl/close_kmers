@@ -21,10 +21,10 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
     /*
      * Set up for clean signal handling / termination
      */
-//    signals_.add(SIGINT);
-//    signals_.add(SIGTERM);
-//    signals_.add(SIGQUIT);
-//    do_await_stop();
+    signals_.add(SIGINT);
+    signals_.add(SIGTERM);
+    signals_.add(SIGQUIT);
+    do_await_stop();
 
     /*
      * Set up listener
@@ -60,6 +60,7 @@ void KmerRequestServer::on_accept(boost::system::error_code ec, KmerRequest *r)
     if (!acceptor_.is_open())
     {
 	std::cout << "not open\n";
+	delete r;
 	return;
     }
     
