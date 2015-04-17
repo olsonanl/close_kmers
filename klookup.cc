@@ -49,7 +49,6 @@ void KmerLookupClient::handle_connect(const boost::system::error_code& err)
     if (!err)
     {
 
-	std::cout << "elapsed at connect " << g_timer.format();
 	// The connection was successful. Send the request.
 	boost::asio::async_write(socket_, request_,
 				 boost::bind(&KmerLookupClient::handle_write_request, this,
@@ -80,9 +79,6 @@ void KmerLookupClient::handle_write_request(const boost::system::error_code& err
 	//
 	if (!input_)
 	{
-	    std::cout << "all done reading\n";
-	    std::cout << "elapsed at read " << g_timer.format();
-	    
 	    std::ostream request_stream(&request_);
 	    request_stream << ">FLUSH\n";
 	    
@@ -116,7 +112,6 @@ void KmerLookupClient::finish_write_request(const boost::system::error_code& err
 {
     if (!err)
     {
-	std::cout << "done writing\n";
     }
     else
     {
@@ -150,7 +145,7 @@ void KmerLookupClient::handle_read(const boost::system::error_code& err, size_t 
 		    // std::cout << "got mapping for " << kmer << "\n";
 		    for (auto it = ki->second.begin(); it != ki->second.end(); it++)
 		    {
-			//std::cout << "  " << *it << "\n";
+			// std::cout << "  " << *it << "\n";
 			
 			hit_count_[*it]++;
 		    }

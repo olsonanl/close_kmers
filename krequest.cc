@@ -14,7 +14,9 @@ KmerRequest::KmerRequest(boost::asio::io_service &io_service,
     mapping_(mapping),
     klookup_endpoint_(klookup_endpoint),
     krequest_(0),
-    klookup_(0)
+    klookup_(0),
+    klookup2_(0),
+    response_stream_(&response_)
 {
 }
 
@@ -24,6 +26,8 @@ KmerRequest::~KmerRequest()
 	delete krequest_;
     if (klookup_)
 	delete klookup_;
+    if (klookup2_)
+	delete klookup2_;
 }
 
 /*
@@ -43,7 +47,6 @@ void KmerRequest::handle_read(boost::system::error_code err, size_t bytes)
 {
     if (!err)
     {
-	std::cout << "krequest handle_read " << g_timer.format();
 	std::istream resp(&request_);
 	std::string line;
 	int done = 0;
@@ -65,8 +68,6 @@ void KmerRequest::handle_read(boost::system::error_code err, size_t bytes)
 	    {
 		ss >> request_type_;
 		ss >> path_;
-		std::cout << path_ << " at " << request_type_ << "\n";
-		std::cout << "time at hdr recv " << g_timer.format();
 	    }
 	    else
 	    {
@@ -76,7 +77,6 @@ void KmerRequest::handle_read(boost::system::error_code err, size_t bytes)
 		while (line[x] == ' ')
 		    x++;
 		std::string v(line.substr(x));
-		std::cout << k << " = " << v << "\n";
 		std::transform(k.begin(), k.end(), k.begin(), ::tolower);
 		headers_[k] = v;
 	    }
@@ -120,15 +120,10 @@ void KmerRequest::handle_post_body(boost::system::error_code err, size_t bytes)
 {
     if (!err)
     {
-	std::cout << "post body\n";
-	std::cout << "size='" << request_.size() << "'\n";
-
 	auto kv = headers_.find("content-length");
 	if (kv != headers_.end())
 	{
 	    int content_size = std::stoi(kv->second);
-	    std::cout << "content size=" << content_size << "\n";
-	    std::cout << "size='" << request_.size() << "'\n";
 	    if (request_.size() < content_size)
 	    {
 		boost::asio::async_read(socket_, request_,
@@ -149,7 +144,7 @@ void KmerRequest::handle_post_body(boost::system::error_code err, size_t bytes)
     }
     else if (err == boost::asio::error::eof)
     {
-	std::cout << "got EOF\n";
+	// std::cout << "got EOF\n";
     }
     else
     {
@@ -165,30 +160,85 @@ void KmerRequest::process_request()
      * and process the lookup.
      */
 
-    std::cout << "initiate lookup " << g_timer.format();
-    krequest_ = new std::istream(&request_);
-    klookup_ = new KmerLookupClient(io_service_, klookup_endpoint_, *krequest_, mapping_,
-				    boost::bind(&KmerRequest::request_complete, this, _1));
+    if (path_ == "/lookup")
+    {
+	krequest_ = new std::istream(&request_);
+	klookup_ = new KmerLookupClient(io_service_, klookup_endpoint_, *krequest_, mapping_,
+					boost::bind(&KmerRequest::request_complete, this, _1));
+    }
+    else if (path_ == "/add")
+    {
+	response_stream_ << "HTTP/1.1 200 OK\n";
+	response_stream_ << "Content-type: text/plain\n";
+	response_stream_ << "\n";
 
+	krequest_ = new std::istream(&request_);
+	klookup2_ = new KmerLookupClient2(io_service_, klookup_endpoint_, *krequest_,
+					  boost::bind(&KmerRequest::on_protein, this, _1),
+					  boost::bind(&KmerRequest::on_hit, this, _1),
+					  boost::bind(&KmerRequest::on_call, this, _1, _2),
+					  boost::bind(&KmerRequest::add_complete, this, _1));
+					
+    }
+    else
+    {
+	std::cout << "not found " << path_ << "\n";
+
+	response_stream_ << "HTTP/1.1 404 not found\n";
+	response_stream_ << "Content-type: text/plain\n";
+	response_stream_ << "\n";
+
+	boost::asio::async_write(socket_, response_,
+				 boost::bind(&KmerRequest::write_response_complete, this,
+					     boost::asio::placeholders::error));
+
+    }
 }
+
+void KmerRequest::on_protein(const std::string &protein)
+{
+    cur_protein_ = protein;
+    cur_protein_id_ = mapping_.encode_id(protein);
+    // std::cout << "on protein " << protein << "\n";
+}
+
+void KmerRequest::on_call(const std::string &function, const std::string &count)
+{
+    // std::cout << "call " << function << "\n";
+    response_stream_ << cur_protein_ << "\t" << function << "\t" << count << "\n";
+}
+
+void KmerRequest::on_hit(unsigned long kmer)
+{
+    mapping_.add_mapping(cur_protein_id_, kmer);
+}
+
+void KmerRequest::add_complete( const boost::system::error_code& err )
+{
+    // std::cout << "Got add complete\n";
+
+    boost::asio::async_write(socket_, response_,
+			     boost::bind(&KmerRequest::write_response_complete, this,
+					 boost::asio::placeholders::error));
+
+    delete krequest_;
+    delete klookup2_;
+    krequest_ = 0;
+    klookup2_ = 0;
+}
+
 
 void KmerRequest::request_complete( const KmerLookupClient::result_t &resp)
 {
-    std::cout << "Got response\n";
-
-    std::ostream resp_stream(&response_);
-
-    resp_stream << "HTTP/1.1 200 OK\n";
-    resp_stream << "Content-type: text/plain\n";
-    resp_stream << "\n";
+    response_stream_ << "HTTP/1.1 200 OK\n";
+    response_stream_ << "Content-type: text/plain\n";
+    response_stream_ << "\n";
     
     // Write response here and we're done but for cleanup
     for (auto it = resp.begin(); it != resp.end(); it++)
     {
-	resp_stream << it->first << "\t" << it->second << "\n";
+	response_stream_ << it->first << "\t" << it->second << "\n";
     }
-    std::cout << "Starting writing response " << g_timer.format() << "\n";
-
     boost::asio::async_write(socket_, response_,
 			     boost::bind(&KmerRequest::write_response_complete, this,
 					 boost::asio::placeholders::error));
@@ -201,8 +251,6 @@ void KmerRequest::request_complete( const KmerLookupClient::result_t &resp)
 
 void KmerRequest::write_response_complete(boost::system::error_code err)
 {
-    std::cout << "Finished writing response " << g_timer.format() << "\n";
-
     socket_.close();
 
     delete this;

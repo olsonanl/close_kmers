@@ -13,6 +13,7 @@
 #include <boost/timer/timer.hpp>
 #include "kmer.h"
 #include "klookup.h"
+#include "klookup2.h"
 
 class KmerRequest
 {
@@ -40,6 +41,11 @@ private:
 
     void write_response_complete(boost::system::error_code err);
     
+    void on_protein(const std::string &protein);
+    void on_hit(unsigned long kmer);
+    void on_call(const std::string &function, const std::string &count);
+    void add_complete( const boost::system::error_code& err );
+
     std::string request_type_;
     std::string path_;
     std::map<std::string, std::string> headers_;
@@ -50,9 +56,15 @@ private:
     KmerPegMapping &mapping_;
     boost::asio::ip::tcp::endpoint klookup_endpoint_;
     KmerLookupClient *klookup_;
+    KmerLookupClient2 *klookup2_;
     std::istream *krequest_;
+
     boost::asio::streambuf response_;
+    std::ostream response_stream_;
     boost::timer::cpu_timer timer_;
+
+    std::string cur_protein_;
+    KmerPegMapping::encoded_id_t cur_protein_id_;
 };
 
 

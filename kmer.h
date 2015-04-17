@@ -26,6 +26,11 @@ public:
 	    
     std::unordered_map<encoded_id_t, id_set> kmer_to_id_;
 
+    encoded_id_t encode_id(const std::string peg);
+    encoded_id_t encode_id(const std::string &genome, const std::string &peg);
+
+    void add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long kmer);
+
     std::string decode_id(encoded_id_t id);
 };
 

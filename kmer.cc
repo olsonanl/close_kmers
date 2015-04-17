@@ -71,12 +71,16 @@ void KmerPegMapping::load_mapping_file(const std::string &mapping_file)
 	unsigned long kmer = std::stoul(line.substr(0, i1));
 	i1 = line.find('|', i1 + 1);
 	size_t i2 = line.find('p', i1 + 1);
-	unsigned long gid = genome_to_id_[line.substr(i1 + 1, i2 - i1 - 2)];
+	// unsigned long gid = genome_to_id_[line.substr(i1 + 1, i2 - i1 - 2)];
 	i1 = line.find('.', i2);
 	i2 = line.find('\t', i1);
-	unsigned long id = std::stoul(line.substr(i1 + 1, i2 - i1 - 1));
+	// unsigned long id = std::stoul(line.substr(i1 + 1, i2 - i1 - 1));
 
-	unsigned long enc = (gid << 17) | id;
+	// unsigned long enc = (gid << 17) | id;
+
+	unsigned long enc = encode_id(line.substr(i1 + 1, i2 - i1 - 2),
+				      line.substr(i1 + 1, i2 - i1 - 1));
+	
 	//printf("k=%lu g=%lu id=%lu enc=%lu\n", kmer, gid, id, enc);
 	kmer_to_id_[kmer].push_back(enc);
 	i++;
@@ -85,6 +89,29 @@ void KmerPegMapping::load_mapping_file(const std::string &mapping_file)
 
     }
     kfile.close();
+}
+
+void KmerPegMapping::add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long kmer)
+{
+    kmer_to_id_[kmer].push_back(enc);
+}
+
+KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string peg)
+{
+    size_t i1 = peg.find('|');
+    size_t i2 = peg.find('p', i1 + 1);
+    std::string genome = peg.substr(i1 + 1, i2 - i1 - 2);
+    i1 = peg.find('.', i2);
+    std::string fid = peg.substr(i1 + 1);
+    // std::cout << "peg='" << peg << "' genome='" << genome << "' id='" << fid << "'\n";
+    return encode_id(genome, fid);
+}
+
+KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string &genome, const std::string &peg)
+{
+    unsigned long gid = genome_to_id_[genome];
+
+    return (gid << 17) | (std::stoul(peg));
 }
 
 std::string KmerPegMapping::decode_id(encoded_id_t id)

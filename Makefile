@@ -16,7 +16,7 @@ endif
 default: kser
 
 OPT = -O2
-OPT = -g
+#OPT = -g
 # OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
 INC = -I$(BOOST)/include 
@@ -40,7 +40,7 @@ x: x.o
 kc: kc.o kmer.o kserver.o krequest.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-kser: kser.o kmer.o kserver.o krequest.o klookup.o
+kser: kser.o kmer.o kserver.o krequest.o klookup.o klookup2.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean:
