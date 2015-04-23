@@ -8,58 +8,46 @@
 #include <boost/bind.hpp>
 #include <boost/filesystem.hpp>
 
-#include "klookup2.h"
+#include "klookup3.h"
 #include "global.h"
 
 using namespace boost::filesystem;
 using boost::asio::ip::tcp;
 
-KmerLookupClient2::KmerLookupClient2(boost::asio::io_service& io_service,
+KmerLookupClient3::KmerLookupClient3(boost::asio::io_service& io_service,
 				     boost::asio::ip::tcp::endpoint endpoint,
-				     const std::string &kmer_options,
-				     std::istream &input,
+				     KmerLookupClient3::stream_queue_t &stream_queue,
 				     boost::function<void ( const std::string &prot )> on_protein,
 				     boost::function<void ( unsigned long kmer )> on_hit,
 				     boost::function<void ( const std::string &line )> on_call,
 				     boost::function<void ( const boost::system::error_code& err )> on_completion)
     : resolver_(io_service),
       socket_(io_service),
-      kmer_options_(kmer_options),
-      input_(input),
       on_protein_(on_protein),
       on_hit_(on_hit),
       on_call_(on_call),
-      on_completion_(on_completion)
+      on_completion_(on_completion),
+      stream_queue_(stream_queue),
+      write_pending_(0)
 {
-    std::ostream request_stream(&request_);
-    if (!kmer_options_.empty())
-    {
-	request_stream << kmer_options_ << "\n";
-    }
-
     timer_.start();
     
     boost::asio::async_connect(socket_, &endpoint,
-			       boost::bind(&KmerLookupClient2::handle_connect, this,
+			       boost::bind(&KmerLookupClient3::handle_connect, this,
 					   boost::asio::placeholders::error));
 
 }
 
-void KmerLookupClient2::handle_connect(const boost::system::error_code& err)
+void KmerLookupClient3::handle_connect(const boost::system::error_code& err)
 {
     if (!err)
     {
-
-	// The connection was successful. Send the request.
-	boost::asio::async_write(socket_, request_,
-				 boost::bind(&KmerLookupClient2::handle_write_request, this,
-					     boost::asio::placeholders::error));
-	
+	// check_queue();
 	//
 	// Also kick off a reader.
 	//
 	boost::asio::async_read_until(socket_, response_, "\n",
-				      boost::bind(&KmerLookupClient2::handle_read, this,
+				      boost::bind(&KmerLookupClient3::handle_read, this,
 						  boost::asio::placeholders::error,
 						  boost::asio::placeholders::bytes_transferred));
 	
@@ -72,40 +60,76 @@ void KmerLookupClient2::handle_connect(const boost::system::error_code& err)
     }
 }
 
-void KmerLookupClient2::handle_write_request(const boost::system::error_code& err)
+/*
+ * Check for the presence of valid at at the front of our input queue.
+ * if there is some, initiate a write.
+ *
+ * If a write is pending, do not do anything.
+ */
+void KmerLookupClient3::check_queue()
+{
+    std::cout << "check_queue " << stream_queue_.size() << "\n";
+    if (write_pending_)
+    {
+	std::cout << "check_queue invoked with a write pending\n";
+	return;
+    }
+    
+    while (stream_queue_.size() > 0)
+    {
+	boost::shared_ptr<std::istream> &input = stream_queue_.front();
+	if (!input)
+	{
+	    std::cout << "check_queue found null\n";
+	    boost::system::error_code ec;
+	    socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
+	    return;
+	}
+	else
+	{
+	    if (*input)
+	    {
+		std::cout << "check found data available\n";
+
+		//
+		// Read next block from the file and initiate write.
+		//
+		input->read(buffer_, sizeof(buffer_));
+	
+		if (input->gcount() > 0)
+		{
+		    std::cout << "write " << input->gcount() << "\n";
+
+		    write_pending_ = 1;
+		    boost::asio::async_write(socket_, boost::asio::buffer(buffer_, input->gcount()),
+					     boost::bind(&KmerLookupClient3::handle_write_request, this,
+							 boost::asio::placeholders::error));
+		    return;
+		}
+
+		if (!*input)
+		{
+		    std::cout << "Hit EOF on input\n";
+		    stream_queue_.pop_front();
+		}
+	    }
+	    else
+	    {
+		std::cout << "Came in with EOF on input\n";
+		stream_queue_.pop_front();
+	    }
+
+	}
+    }
+}
+
+void KmerLookupClient3::handle_write_request(const boost::system::error_code& err)
 {
     if (!err)
     {
-	//
-	// check for EOF from last time
-	//
-	if (!input_)
-	{
-	    // std::cout << "all done reading\n";
-	    // std::cout << "elapsed at read " << g_timer.format();
-	    
-	    std::ostream request_stream(&request_);
-	    request_stream << ">FLUSH\n";
-	    
-	    boost::asio::async_write(socket_, request_,
-				     boost::bind(&KmerLookupClient2::finish_write_request, this,
-						 boost::asio::placeholders::error));
-	    
-	}
-	
-	//
-	// Read next block from the file and initiate write.
-	//
-	input_.read(buffer_, sizeof(buffer_));
-	
-	if (input_.gcount() > 0)
-	{
-	    // std::cout << "write " << input_.gcount() << "\n";
-	    
-	    boost::asio::async_write(socket_, boost::asio::buffer(buffer_, input_.gcount()),
-				     boost::bind(&KmerLookupClient2::handle_write_request, this,
-						 boost::asio::placeholders::error));
-	}
+	std::cout << "write completed\n";
+	write_pending_ = 0;
+	check_queue();
     }
     else
     {
@@ -114,31 +138,19 @@ void KmerLookupClient2::handle_write_request(const boost::system::error_code& er
     }
 }
 
-void KmerLookupClient2::finish_write_request(const boost::system::error_code& err)
-{
-    if (!err)
-    {
-	boost::system::error_code ec;
-	socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
-    }
-    else
-    {
-	std::cout << "Error: " << err.message() << "\n";
-    }
-}
 
-void KmerLookupClient2::handle_read(const boost::system::error_code& err, size_t bytes_transferred)
+void KmerLookupClient3::handle_read(const boost::system::error_code& err, size_t bytes_transferred)
 {
     if (!err)
     {
-//	std::cout << "Handle read " << bytes_transferred << ":\n";
+	// std::cout << "Handle read " << bytes_transferred << ":\n";
 
 	std::istream resp(&response_);
 	std::string line;
 	if (std::getline(resp, line, '\n'))
 	{
 
-//	    std::cout << line << "\n";
+	    // std::cout << line << "\n";
 	    
 	    std::string h;
 	    unsigned long offset, kmer;
@@ -179,7 +191,7 @@ void KmerLookupClient2::handle_read(const boost::system::error_code& err, size_t
 	    }		
 	}
 	boost::asio::async_read_until(socket_, response_, "\n",
-				      boost::bind(&KmerLookupClient2::handle_read, this,
+				      boost::bind(&KmerLookupClient3::handle_read, this,
 						  boost::asio::placeholders::error,
 						  boost::asio::placeholders::bytes_transferred));
     }

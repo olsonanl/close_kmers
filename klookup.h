@@ -17,6 +17,7 @@ public:
 
     KmerLookupClient(boost::asio::io_service& io_service,
 		     boost::asio::ip::tcp::endpoint,
+		     const std::string &kmer_options,
 		     std::istream &input,
 		     KmerPegMapping &mapping,
 		     boost::function<void ( const result_t & )> on_completion);
@@ -32,6 +33,7 @@ private:
 
     tcp::resolver resolver_;
     tcp::socket socket_;
+    std::string kmer_options_;
     boost::asio::streambuf request_;
     boost::asio::streambuf response_;
     char buffer_[4096];

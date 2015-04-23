@@ -16,7 +16,8 @@ endif
 default: kser
 
 OPT = -O2
-#OPT = -g
+#OPT = -O2 -pg
+OPT = -g
 # OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
 INC = -I$(BOOST)/include 
@@ -31,24 +32,29 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BOOST)/lib/libboost_chrono.a \
 	$(THREADLIB)
 
-depend:
-	makedepend $(INC) *.cc
-
 x: x.o
-	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 kc: kc.o kmer.o kserver.o krequest.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-kser: kser.o kmer.o kserver.o krequest.o klookup.o klookup2.o
-	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
+kser2: kser.o kmer.o kserver.o krequest.o klookup.o klookup2.o klookup3.o
+	$(CXX) $(LDFLAGS) $(OPT) -o kser2 $^ $(LIBS)
 
 clean:
 	rm -f *.o kc kser
 
-kc.o: kserver.h krequest.h
-klookup.o: kmer.h global.h
-krequest.o: kmer.h klookup.h
-krequest.o: global.h
-kser.o: kserver.h krequest.h klookup.h
+depend:
+	makedepend -Y *.cc
+
+# DO NOT DELETE
+
+kc.o: kmer.h kserver.h krequest.h klookup.h klookup2.h klookup3.h
+klookup2.o: klookup2.h kmer.h global.h
+klookup3.o: klookup3.h kmer.h global.h
+klookup.o: klookup.h kmer.h global.h
+kmer.o: kmer.h
+krequest.o: krequest.h kmer.h klookup.h klookup2.h klookup3.h global.h
+kser.o: global.h kmer.h kserver.h krequest.h klookup.h klookup2.h klookup3.h
+kserver.o: kserver.h kmer.h krequest.h klookup.h klookup2.h klookup3.h
 kserver.o: global.h

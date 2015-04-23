@@ -32,6 +32,8 @@ public:
     void add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long kmer);
 
     std::string decode_id(encoded_id_t id);
+
+    unsigned long next_genome_id_;
 };
 
 

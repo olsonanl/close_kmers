@@ -31,7 +31,8 @@ std::vector<std::string> split(const std::string &s, char delim) {
 }
 
 KmerPegMapping::KmerPegMapping(const std::string &data_dir) :
-    data_dir_(data_dir)
+    data_dir_(data_dir),
+    next_genome_id_(0)
 {
     std::string genome_file = data_dir_ + "/genomes";
     std::ifstream gfile(genome_file);
@@ -41,15 +42,15 @@ KmerPegMapping::KmerPegMapping(const std::string &data_dir) :
 	exit(1);
     }
 
-    unsigned long next_id = 0;
     std::string line;
     while (std::getline(gfile, line))
     {
 	std::vector<std::string> x = split(line, '\t');
 	std::string genome = x[1];
-	unsigned long id = next_id++;
+	unsigned long id = next_genome_id_++;
 	genome_to_id_[genome] = id;
 	id_to_genome_[id] = genome;
+	
     }
 
     gfile.close();
@@ -71,12 +72,8 @@ void KmerPegMapping::load_mapping_file(const std::string &mapping_file)
 	unsigned long kmer = std::stoul(line.substr(0, i1));
 	i1 = line.find('|', i1 + 1);
 	size_t i2 = line.find('p', i1 + 1);
-	// unsigned long gid = genome_to_id_[line.substr(i1 + 1, i2 - i1 - 2)];
 	i1 = line.find('.', i2);
 	i2 = line.find('\t', i1);
-	// unsigned long id = std::stoul(line.substr(i1 + 1, i2 - i1 - 1));
-
-	// unsigned long enc = (gid << 17) | id;
 
 	unsigned long enc = encode_id(line.substr(i1 + 1, i2 - i1 - 2),
 				      line.substr(i1 + 1, i2 - i1 - 1));
@@ -109,7 +106,19 @@ KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string peg)
 
 KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string &genome, const std::string &peg)
 {
-    unsigned long gid = genome_to_id_[genome];
+    unsigned long gid;
+    auto it = genome_to_id_.find(genome);
+    if (it == genome_to_id_.end())
+    {
+	gid = next_genome_id_++;
+	genome_to_id_[genome] = gid;
+	id_to_genome_[gid] = genome;
+    }
+    else
+    {
+	gid = it->second;
+    }
+    // unsigned long gid = genome_to_id_[genome];
 
     return (gid << 17) | (std::stoul(peg));
 }

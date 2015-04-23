@@ -25,17 +25,26 @@ struct less_second : std::binary_function<T,T,bool>
 
 KmerLookupClient::KmerLookupClient(boost::asio::io_service& io_service,
 				   boost::asio::ip::tcp::endpoint endpoint,
+				   const std::string &kmer_options,
 				   std::istream &input,
 				   KmerPegMapping &mapping,
 				   boost::function<void ( const result_t &)> on_completion)
     : resolver_(io_service),
       socket_(io_service),
+      kmer_options_(kmer_options),
       input_(input),
       mapping_(mapping),
       on_completion_(on_completion)
 {
     std::ostream request_stream(&request_);
-    request_stream << "-d 1 -a\n";
+    if (kmer_options_.empty())
+    {
+	request_stream << "-d 1 -a\n";
+    }
+    else
+    {
+	request_stream << kmer_options_ << "\n";
+    }
 
     timer_.start();
     
@@ -85,7 +94,7 @@ void KmerLookupClient::handle_write_request(const boost::system::error_code& err
 	    boost::asio::async_write(socket_, request_,
 				     boost::bind(&KmerLookupClient::finish_write_request, this,
 						 boost::asio::placeholders::error));
-	    
+	    return;
 	}
 	
 	//

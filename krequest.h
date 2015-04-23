@@ -9,11 +9,13 @@
 
 #include <vector>
 #include <string>
+#include <set>
 #include <boost/asio.hpp>
 #include <boost/timer/timer.hpp>
 #include "kmer.h"
 #include "klookup.h"
 #include "klookup2.h"
+#include "klookup3.h"
 
 class KmerRequest
 {
@@ -43,8 +45,13 @@ private:
     
     void on_protein(const std::string &protein);
     void on_hit(unsigned long kmer);
-    void on_call(const std::string &function, const std::string &count);
+    void on_call(const std::string &line);
     void add_complete( const boost::system::error_code& err );
+
+    void handle_matrix(boost::system::error_code err, size_t bytes);
+    void on_matrix_protein(const std::string &protein);
+    void on_matrix_hit(unsigned long kmer);
+    void matrix_complete( const boost::system::error_code& err );
 
     std::string request_type_;
     std::string path_;
@@ -59,7 +66,20 @@ private:
     KmerLookupClient2 *klookup2_;
     std::istream *krequest_;
 
+    KmerLookupClient3::stream_queue_t stream_queue_;
+    boost::shared_ptr<KmerLookupClient3> klookup3_;
+
+    //
+    // Distance matrix support.
+    //
+    void handle_matrix_sequence(const std::string &seq);
+    std::string cur_sequence_;
+    size_t bytes_left_;
+    std::set<KmerPegMapping::encoded_id_t> matrix_proteins_;
+    std::map<std::pair<KmerPegMapping::encoded_id_t, KmerPegMapping::encoded_id_t>, unsigned long> distance_;
+
     boost::asio::streambuf response_;
+    //framed_streambuf response_;
     std::ostream response_stream_;
     boost::timer::cpu_timer timer_;
 

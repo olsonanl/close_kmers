@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
     auto iter = resolver.resolve({khost, kport});
     boost::asio::ip::tcp::endpoint endpoint = *iter;
     
-    KmerRequestServer kserver(io_service, "5100", mapping, endpoint);
+    KmerRequestServer kserver(io_service, "5101", mapping, endpoint);
 
 //	  std::ifstream ifile(argv[3]);
 	  
