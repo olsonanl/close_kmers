@@ -18,16 +18,18 @@ using namespace boost::filesystem;
 
 int main(int argc, char* argv[])
 {
-    if (argc != 5)
+    if (argc != 7)
     {
-	std::cout << "Usage: " << argv[0] << " kmer-guts-host kmer-guts-port kmer-data-dir peg-kmer-data\n";
+	std::cout << "Usage: " << argv[0] << " listen-port listen-port-file kmer-guts-host kmer-guts-port kmer-data-dir peg-kmer-data\n";
 	return 1;
     }
 
-    std::string khost = argv[1];
-    std::string kport = argv[2];
-    std::string kmer_data = argv[3];
-    std::string peg_kmer_data = argv[4];
+    std::string listen_port = argv[1];
+    std::string listen_port_file = argv[2];
+    std::string khost = argv[3];
+    std::string kport = argv[4];
+    std::string kmer_data = argv[5];
+    std::string peg_kmer_data = argv[6];
 
     KmerPegMapping mapping(kmer_data);
 
@@ -54,7 +56,7 @@ int main(int argc, char* argv[])
     auto iter = resolver.resolve({khost, kport});
     boost::asio::ip::tcp::endpoint endpoint = *iter;
     
-    KmerRequestServer kserver(io_service, "5101", mapping, endpoint);
+    KmerRequestServer kserver(io_service, listen_port, listen_port_file, mapping, endpoint);
 
 //	  std::ifstream ifile(argv[3]);
 	  

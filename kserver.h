@@ -20,6 +20,7 @@ class KmerRequestServer
 public:
     KmerRequestServer(boost::asio::io_service& io_service,
 		      const std::string &port,
+		      const std::string &port_file,
 		      KmerPegMapping &mapping,
 		      boost::asio::ip::tcp::endpoint &klookup_endpoint);
 
@@ -33,6 +34,7 @@ private:
     boost::asio::ip::tcp::acceptor acceptor_;
     boost::asio::signal_set signals_;
     std::string port_;
+    std::string port_file_;
     std::set<KmerRequest *> active_;
     KmerPegMapping &mapping_;
     boost::asio::ip::tcp::endpoint klookup_endpoint_;

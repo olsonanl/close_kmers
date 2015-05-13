@@ -19,7 +19,7 @@ public:
 		      boost::asio::ip::tcp::endpoint,
 		      const std::string &kmer_options,
 		      std::istream &input,
-		      boost::function<void ( const std::string &prot )> on_protein,
+		      boost::function<void ( const std::string &prot, size_t len )> on_protein,
 		      boost::function<void ( unsigned long kmer )> on_hit,
 		      boost::function<void ( const std::string &line )> on_call,
 		      boost::function<void ( const boost::system::error_code& err)> on_completion);
@@ -40,7 +40,7 @@ private:
     boost::asio::streambuf response_;
     char buffer_[4096];
     std::istream &input_;
-    boost::function<void ( const std::string &prot )> on_protein_;
+    boost::function<void ( const std::string &prot, size_t len )> on_protein_;
     boost::function<void ( unsigned long kmer )> on_hit_;
     boost::function<void ( const std::string &line )> on_call_;
     boost::function<void ( const boost::system::error_code& err )> on_completion_;

@@ -43,13 +43,13 @@ private:
 
     void write_response_complete(boost::system::error_code err);
     
-    void on_protein(const std::string &protein);
+    void on_protein(const std::string &protein, size_t len);
     void on_hit(unsigned long kmer);
     void on_call(const std::string &line);
     void add_complete( const boost::system::error_code& err );
 
     void handle_matrix(boost::system::error_code err, size_t bytes);
-    void on_matrix_protein(const std::string &protein);
+    void on_matrix_protein(const std::string &protein, size_t len);
     void on_matrix_hit(unsigned long kmer);
     void matrix_complete( const boost::system::error_code& err );
 
@@ -75,7 +75,7 @@ private:
     void handle_matrix_sequence(const std::string &seq);
     std::string cur_sequence_;
     size_t bytes_left_;
-    std::set<KmerPegMapping::encoded_id_t> matrix_proteins_;
+    std::map<KmerPegMapping::encoded_id_t, size_t> matrix_proteins_;
     std::map<std::pair<KmerPegMapping::encoded_id_t, KmerPegMapping::encoded_id_t>, unsigned long> distance_;
 
     boost::asio::streambuf response_;
@@ -85,6 +85,7 @@ private:
 
     std::string cur_protein_;
     KmerPegMapping::encoded_id_t cur_protein_id_;
+    size_t cur_protein_len_;
 };
 
 

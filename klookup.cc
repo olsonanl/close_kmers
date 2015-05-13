@@ -104,7 +104,7 @@ void KmerLookupClient::handle_write_request(const boost::system::error_code& err
 	
 	if (input_.gcount() > 0)
 	{
-	    std::cout << "write " << input_.gcount() << "\n";
+	    // std::cout << "write " << input_.gcount() << "\n";
 	    
 	    boost::asio::async_write(socket_, boost::asio::buffer(buffer_, input_.gcount()),
 				     boost::bind(&KmerLookupClient::handle_write_request, this,

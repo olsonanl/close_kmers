@@ -18,7 +18,7 @@ KmerLookupClient2::KmerLookupClient2(boost::asio::io_service& io_service,
 				     boost::asio::ip::tcp::endpoint endpoint,
 				     const std::string &kmer_options,
 				     std::istream &input,
-				     boost::function<void ( const std::string &prot )> on_protein,
+				     boost::function<void ( const std::string &prot, size_t len )> on_protein,
 				     boost::function<void ( unsigned long kmer )> on_hit,
 				     boost::function<void ( const std::string &line )> on_call,
 				     boost::function<void ( const boost::system::error_code& err )> on_completion)
@@ -90,7 +90,7 @@ void KmerLookupClient2::handle_write_request(const boost::system::error_code& er
 	    boost::asio::async_write(socket_, request_,
 				     boost::bind(&KmerLookupClient2::finish_write_request, this,
 						 boost::asio::placeholders::error));
-	    
+	    return;
 	}
 	
 	//
@@ -100,11 +100,32 @@ void KmerLookupClient2::handle_write_request(const boost::system::error_code& er
 	
 	if (input_.gcount() > 0)
 	{
-	    // std::cout << "write " << input_.gcount() << "\n";
+	    std::cout << "write " << input_.gcount() << "\n";
 	    
 	    boost::asio::async_write(socket_, boost::asio::buffer(buffer_, input_.gcount()),
 				     boost::bind(&KmerLookupClient2::handle_write_request, this,
 						 boost::asio::placeholders::error));
+	}
+	else
+	{
+	    
+	    std::cout << "handle_write_request: read buffer return gcount " << input_.gcount() << "\n";
+
+	    if (!input_)
+	    {
+		std::cout << "EOF hit\n";
+		std::ostream request_stream(&request_);
+		request_stream << ">FLUSH\n";
+		
+		boost::asio::async_write(socket_, request_,
+					 boost::bind(&KmerLookupClient2::finish_write_request, this,
+						     boost::asio::placeholders::error));
+	    }
+	    else
+	    {
+		std::cout << "Not eof? \n";
+	    }
+	       
 	}
     }
     else
@@ -152,15 +173,17 @@ void KmerLookupClient2::handle_read(const boost::system::error_code& err, size_t
 
 		if (on_hit_)
 		    on_hit_(kmer);
-		if (on_call_)
-		    on_call_(line);
+//		if (on_call_)
+//		    on_call_(line);
 	    }
 	    else if (h == "PROTEIN-ID")
 	    {
 		std::string prot;
+		size_t len;
 		s >> prot;
+		s >> len;
 		if (on_protein_)
-		    on_protein_(prot);
+		    on_protein_(prot, len);
 		if (on_call_)
 		    on_call_(line);
 	    }

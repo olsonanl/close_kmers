@@ -24,7 +24,7 @@ KmerRequest::KmerRequest(boost::asio::io_service &io_service,
 
 KmerRequest::~KmerRequest()
 {
-    std::cout << "DESTROY KmerRequest\n";
+    // std::cout << "DESTROY KmerRequest\n";
     if (krequest_)
 	delete krequest_;
     if (klookup_)
@@ -64,12 +64,12 @@ void KmerRequest::handle_read(boost::system::error_code err, size_t bytes)
 	    if (l && line[l - 1] == '\r')
 		line.pop_back();
 
-	    std::cout << "|" << line << "| " << line.length() << "\n";
+	    // std::cout << "|" << line << "| " << line.length() << "\n";
 	    
 	    std::stringstream ss(line);
 	    if (line.length() == 0)
 	    {
-		std::cout <<"done\n";
+		// std::cout <<"done\n";
 		done = 1;
 	    }
 	    else if (request_type_.empty())
@@ -87,7 +87,7 @@ void KmerRequest::handle_read(boost::system::error_code err, size_t bytes)
 		std::string v(line.substr(x));
 		std::transform(k.begin(), k.end(), k.begin(), ::tolower);
 		headers_[k] = v;
-		std::cout << "'" << k << "': '" << v << "'\n";
+		// std::cout << "'" << k << "': '" << v << "'\n";
 	    }
 	}
 
@@ -133,7 +133,7 @@ void KmerRequest::handle_request()
 		kc(new KmerLookupClient3(io_service_,
 					 klookup_endpoint_,
 					 stream_queue_,
-					 boost::bind(&KmerRequest::on_matrix_protein, this, _1),
+					 boost::bind(&KmerRequest::on_matrix_protein, this, _1, _2),
 					 boost::bind(&KmerRequest::on_matrix_hit, this, _1),
 					 0,
 					 boost::bind(&KmerRequest::matrix_complete, this, _1)));
@@ -142,8 +142,8 @@ void KmerRequest::handle_request()
 	    auto kv = headers_.find("content-length");
 	    if (kv != headers_.end())
 	    {
-		int content_size = std::stoi(kv->second);
-		std::cout << "reading " << content_size << "\n";
+		size_t content_size = std::stoul(kv->second);
+// 		std::cout << "reading " << content_size << "\n";
 		
 		bytes_left_ = content_size;
 		cur_sequence_ = "";
@@ -153,11 +153,11 @@ void KmerRequest::handle_request()
 	}
 	else
 	{
-	    std::cout << "handling post buf size " << request_.size() << "\n";
+	    // std::cout << "handling post buf size " << request_.size() << "\n";
 	    auto kv = headers_.find("content-length");
 	    if (kv != headers_.end())
 	    {
-		int content_size = std::stoi(kv->second);
+		size_t content_size = std::stoul(kv->second);
 		// std::cout << "reading " << content_size << "\n";
 		if (request_.size() < content_size)
 		{
@@ -241,7 +241,7 @@ void KmerRequest::handle_matrix(boost::system::error_code err, size_t bytes)
     }
     if (bytes_left_)
     {
-	std::cout << "Issue read -- " << bytes_left_ << " bytes left\n";
+	// std::cout << "Issue read -- " << bytes_left_ << " bytes left\n";
 	boost::asio::async_read(socket_, request_,
 				boost::asio::transfer_at_least(1),
 				boost::bind(&KmerRequest::handle_matrix, this,
@@ -280,7 +280,7 @@ void KmerRequest::handle_matrix_sequence(const std::string &seq)
     // Find identifier
     size_t i = seq.find_first_of(" \t\n", 1);
     std::string ident = seq.substr(1, i-1);
-    std::cout << "found '" << ident << "'\n";
+    // std::cout << "found '" << ident << "'\n";
     
     boost::shared_ptr<std::istream> sp(new std::istringstream(seq));
     stream_queue_.push_back(sp);
@@ -296,7 +296,7 @@ void KmerRequest::handle_post_body(boost::system::error_code err, size_t bytes)
 	auto kv = headers_.find("content-length");
 	if (kv != headers_.end())
 	{
-	    int content_size = std::stoi(kv->second);
+	    size_t content_size = std::stoul(kv->second);
 	    // std::cout << "reading " << content_size << "\n";
 	    if (request_.size() < content_size)
 	    {
@@ -357,7 +357,7 @@ void KmerRequest::process_request()
 
 	krequest_ = new std::istream(&request_);
 	klookup2_ = new KmerLookupClient2(io_service_, klookup_endpoint_, opts, *krequest_,
-					  boost::bind(&KmerRequest::on_protein, this, _1),
+					  boost::bind(&KmerRequest::on_protein, this, _1, _2),
 					  boost::bind(&KmerRequest::on_hit, this, _1),
 					  boost::bind(&KmerRequest::on_call, this, _1),
 					  boost::bind(&KmerRequest::add_complete, this, _1));
@@ -392,7 +392,7 @@ void KmerRequest::process_request()
     }
 }
 
-void KmerRequest::on_protein(const std::string &protein)
+void KmerRequest::on_protein(const std::string &protein, size_t len)
 {
     cur_protein_ = protein;
     cur_protein_id_ = mapping_.encode_id(protein);
@@ -412,7 +412,7 @@ void KmerRequest::on_hit(unsigned long kmer)
 
 void KmerRequest::add_complete( const boost::system::error_code& err )
 {
-    std::cout << "Got add complete\n";
+//     std::cout << "Got add complete\n";
     
     boost::asio::async_write(socket_, response_,
 			     boost::bind(&KmerRequest::write_response_complete, this,
@@ -424,12 +424,13 @@ void KmerRequest::add_complete( const boost::system::error_code& err )
     klookup2_ = 0;
 }
 
-void KmerRequest::on_matrix_protein(const std::string &protein)
+void KmerRequest::on_matrix_protein(const std::string &protein, size_t len)
 {
     cur_protein_ = protein;
     cur_protein_id_ = mapping_.encode_id(protein);
-//    std::cout << "on protein " << protein << "\n";
-    matrix_proteins_.insert(cur_protein_id_);
+    cur_protein_len_ = len;
+    // std::cout << "on protein " << protein << " len=" << len << "\n";
+    matrix_proteins_[cur_protein_id_] = len;
 }
 
 void KmerRequest::on_matrix_hit(unsigned long kmer)
@@ -438,33 +439,49 @@ void KmerRequest::on_matrix_hit(unsigned long kmer)
 
     auto ki = mapping_.kmer_to_id_.find(kmer);
     if (ki != mapping_.kmer_to_id_.end())
-    {
+  {
 //	std::cout << "got mapping for " << kmer << "\n";
 	for (auto it = ki->second.begin(); it != ki->second.end(); it++)
 	{
 //	    std::cout << "  " << *it << " " << mapping_.decode_id(*it) << "\n";
 
-	    if (matrix_proteins_.find(*it) != matrix_proteins_.end())
+	    if (*it != cur_protein_id_ && matrix_proteins_.find(*it) != matrix_proteins_.end())
 	    {
 //		std::cout << "Add " << cur_protein_ << " " << mapping_.decode_id(*it) << "\n";
 		distance_[std::make_pair(cur_protein_id_, *it)]++;
 	    }
+	    else
+	    {
+//		std::cout << "drop " << cur_protein_ << " " << mapping_.decode_id(*it) << "\n";
+	    }
 	}
     }
+
 }
 
 
 
 void KmerRequest::matrix_complete( const boost::system::error_code& err )
 {
-    std::cout << "Got matrix complete\n";
+    response_stream_ << "HTTP/1.1 200 OK\n";
+    response_stream_ << "Content-type: text/plain\n";
+    response_stream_ << "\n";
+    
+//    std::cout << "Got matrix complete\n";
 
     for (auto it = distance_.begin(); it != distance_.end(); it++)
     {
 	std::string p1 = mapping_.decode_id(it->first.first);
 	std::string p2 = mapping_.decode_id(it->first.second);
-	std::cout << p1 << " " << p2 << " " << it->second << "\n";
+	size_t l1 = matrix_proteins_[it->first.first];
+	size_t l2 = matrix_proteins_[it->first.second];
+	float score = (float) it->second / ((float) (l1 + l2));
+	// std::cout << p1 << "\t" << p2 << "\t" << it->second << "\n";
+	response_stream_ << p1 << "\t" << p2 << "\t" << it->second << "\t" << score << "\n";
     }
+    boost::asio::async_write(socket_, response_,
+			     boost::bind(&KmerRequest::write_response_complete, this,
+					 boost::asio::placeholders::error));
 }
 
 
@@ -483,7 +500,7 @@ void KmerRequest::request_complete( const KmerLookupClient::result_t &resp)
 			     boost::bind(&KmerRequest::write_response_complete, this,
 					 boost::asio::placeholders::error));
 
-    std::cout << "request complete, deleting klookup\n";
+//    std::cout << "request complete, deleting klookup\n";
     delete krequest_;
     delete klookup_;
     krequest_ = 0;
@@ -492,7 +509,7 @@ void KmerRequest::request_complete( const KmerLookupClient::result_t &resp)
 
 void KmerRequest::write_response_complete(boost::system::error_code err)
 {
-    std::cout << "write_response_complete close()\n";
+//    std::cout << "write_response_complete close()\n";
     socket_.close();
 
     delete this;

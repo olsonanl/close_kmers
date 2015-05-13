@@ -21,7 +21,7 @@ public:
     KmerLookupClient3(boost::asio::io_service& io_service,
 		      boost::asio::ip::tcp::endpoint,
 		      stream_queue_t &stream_queue,
-		      boost::function<void ( const std::string &prot )> on_protein,
+		      boost::function<void ( const std::string &prot, size_t len )> on_protein,
 		      boost::function<void ( unsigned long kmer )> on_hit,
 		      boost::function<void ( const std::string &line )> on_call,
 		      boost::function<void ( const boost::system::error_code& err)> on_completion);
@@ -42,7 +42,7 @@ private:
     boost::asio::streambuf request_;
     boost::asio::streambuf response_;
     char buffer_[4096];
-    boost::function<void ( const std::string &prot )> on_protein_;
+    boost::function<void ( const std::string &prot, size_t len )> on_protein_;
     boost::function<void ( unsigned long kmer )> on_hit_;
     boost::function<void ( const std::string &line )> on_call_;
     boost::function<void ( const boost::system::error_code& err )> on_completion_;

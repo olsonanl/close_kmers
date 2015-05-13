@@ -17,7 +17,7 @@ using boost::asio::ip::tcp;
 KmerLookupClient3::KmerLookupClient3(boost::asio::io_service& io_service,
 				     boost::asio::ip::tcp::endpoint endpoint,
 				     KmerLookupClient3::stream_queue_t &stream_queue,
-				     boost::function<void ( const std::string &prot )> on_protein,
+				     boost::function<void ( const std::string &prot, size_t len )> on_protein,
 				     boost::function<void ( unsigned long kmer )> on_hit,
 				     boost::function<void ( const std::string &line )> on_call,
 				     boost::function<void ( const boost::system::error_code& err )> on_completion)
@@ -68,10 +68,10 @@ void KmerLookupClient3::handle_connect(const boost::system::error_code& err)
  */
 void KmerLookupClient3::check_queue()
 {
-    std::cout << "check_queue " << stream_queue_.size() << "\n";
+//    std::cout << "check_queue " << stream_queue_.size() << "\n";
     if (write_pending_)
     {
-	std::cout << "check_queue invoked with a write pending\n";
+//	std::cout << "check_queue invoked with a write pending\n";
 	return;
     }
     
@@ -80,7 +80,7 @@ void KmerLookupClient3::check_queue()
 	boost::shared_ptr<std::istream> &input = stream_queue_.front();
 	if (!input)
 	{
-	    std::cout << "check_queue found null\n";
+//	    std::cout << "check_queue found null\n";
 	    boost::system::error_code ec;
 	    socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
 	    return;
@@ -89,7 +89,7 @@ void KmerLookupClient3::check_queue()
 	{
 	    if (*input)
 	    {
-		std::cout << "check found data available\n";
+//		std::cout << "check found data available\n";
 
 		//
 		// Read next block from the file and initiate write.
@@ -98,7 +98,7 @@ void KmerLookupClient3::check_queue()
 	
 		if (input->gcount() > 0)
 		{
-		    std::cout << "write " << input->gcount() << "\n";
+//		    std::cout << "write " << input->gcount() << "\n";
 
 		    write_pending_ = 1;
 		    boost::asio::async_write(socket_, boost::asio::buffer(buffer_, input->gcount()),
@@ -109,13 +109,13 @@ void KmerLookupClient3::check_queue()
 
 		if (!*input)
 		{
-		    std::cout << "Hit EOF on input\n";
+//		    std::cout << "Hit EOF on input\n";
 		    stream_queue_.pop_front();
 		}
 	    }
 	    else
 	    {
-		std::cout << "Came in with EOF on input\n";
+//		std::cout << "Came in with EOF on input\n";
 		stream_queue_.pop_front();
 	    }
 
@@ -127,7 +127,7 @@ void KmerLookupClient3::handle_write_request(const boost::system::error_code& er
 {
     if (!err)
     {
-	std::cout << "write completed\n";
+//	std::cout << "write completed\n";
 	write_pending_ = 0;
 	check_queue();
     }
@@ -170,9 +170,11 @@ void KmerLookupClient3::handle_read(const boost::system::error_code& err, size_t
 	    else if (h == "PROTEIN-ID")
 	    {
 		std::string prot;
+		size_t len;
 		s >> prot;
+		s >> len;
 		if (on_protein_)
-		    on_protein_(prot);
+		    on_protein_(prot, len);
 		if (on_call_)
 		    on_call_(line);
 	    }

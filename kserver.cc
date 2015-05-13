@@ -4,15 +4,18 @@
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 #include <iostream>
+#include <fstream>
 #include "global.h"
 
 KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 				     const std::string &port,
+				     const std::string &port_file,
 				     KmerPegMapping &mapping,
 				     boost::asio::ip::tcp::endpoint &klookup_endpoint) :
     io_service_(io_service),
     acceptor_(io_service_),
     port_(port),
+    port_file_(port_file),
     signals_(io_service_),
     mapping_(mapping),
     klookup_endpoint_(klookup_endpoint)
@@ -36,7 +39,14 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
     acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
     acceptor_.bind(endpoint);
     acceptor_.listen();
-    std::cout << "Listening on " << endpoint << "\n";
+    std::cout << "Listening on " << acceptor_.local_endpoint() << "\n";
+    if (!port_file_.empty())
+    {
+	std::ofstream out(port_file);
+	out << acceptor_.local_endpoint().port() << "\n";
+	out.close();
+    }
+	    
     do_accept();
 }
 

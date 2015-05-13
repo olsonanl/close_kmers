@@ -17,7 +17,7 @@ default: kser
 
 OPT = -O2
 #OPT = -O2 -pg
-OPT = -g
+#OPT = -g
 # OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
 INC = -I$(BOOST)/include 
