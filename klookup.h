@@ -36,7 +36,7 @@ private:
     std::string kmer_options_;
     boost::asio::streambuf request_;
     boost::asio::streambuf response_;
-    char buffer_[4096];
+    char buffer_[1048576];
     std::istream &input_;
     KmerPegMapping &mapping_;
     std::map<KmerPegMapping::encoded_id_t, unsigned int> hit_count_;

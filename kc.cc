@@ -229,12 +229,12 @@ int main(int argc, char* argv[])
 	for (auto dit = directory_iterator(data_dir); dit != end_iter; dit++)
 	{
 	    std::cout << dit->path().string() << "\n";
-	    mapping.load_mapping_file(dit->path().string());
+	    mapping.load_compact_mapping_file(dit->path().string());
 	}
     }
     else
     {
-	mapping.load_mapping_file(data_dir.string());
+	mapping.load_compact_mapping_file(data_dir.string());
     }
 
       try

@@ -12,6 +12,8 @@
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
+#include "popen.h"
+
 #include "kmer.h"
 
 std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
@@ -88,9 +90,73 @@ void KmerPegMapping::load_mapping_file(const std::string &mapping_file)
     kfile.close();
 }
 
+void KmerPegMapping::load_compact_mapping_file(const std::string &mapping_file)
+{
+    /*
+     * Read and encode the peg/kmer data.
+     */
+    unsigned int i = 0;
+
+    if (mapping_file.substr(mapping_file.length() - 3) == ".gz")
+    {
+	Popen pipe_wrapper(("gunzip < " + mapping_file).c_str());
+	io::file_descriptor_source pipe_device(fileno(pipe_wrapper.stream()),
+					       io::never_close_handle);
+	io::stream<io::file_descriptor_source> pipe_stream(pipe_device, 0x1000, 0x1000);
+	load_compact_mapping_file(pipe_stream);
+    }
+    else
+    {
+	std::ifstream kfile(mapping_file);
+	load_compact_mapping_file(kfile);
+	kfile.close();
+    }
+}
+
+void KmerPegMapping::load_compact_mapping_file(std::istream &kfile)
+{
+    unsigned long kmer;
+    id_set vals;
+
+    while (kfile >> kmer)
+    {
+	unsigned long size;
+	kfile >> size;
+
+	vals.reserve(size);
+	
+	while (kfile.peek() != '\n')
+	{
+	    std::string fid;
+	    kfile >> fid;
+
+	    encoded_id_t enc = encode_id(fid);
+	    vals.push_back(enc);
+	}
+	// std::cout << kmer << " " << size << " got n values " << vals.size() << "\n";
+	kmer_to_id_[kmer] = vals;
+	vals.clear();
+    }
+}
+
 void KmerPegMapping::add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long kmer)
 {
-    kmer_to_id_[kmer].push_back(enc);
+    // kmer_to_id_[kmer].push_back(enc);
+
+    auto it = kmer_to_id_.find(kmer);
+
+    if (it == kmer_to_id_.end())
+    {
+	auto n = kmer_to_id_.emplace(std::make_pair(kmer, id_set()));
+	// std::cout << "Alloc new for " << kmer << "\n";
+	n.first->second.reserve(512);
+	n.first->second.push_back(enc);
+    }
+    else
+    {
+	// std::cout << "reuse " << kmer << "\n";
+	it->second.push_back(enc);
+    }
 }
 
 KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string peg)

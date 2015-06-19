@@ -38,7 +38,7 @@ private:
     std::string kmer_options_;
     boost::asio::streambuf request_;
     boost::asio::streambuf response_;
-    char buffer_[4096];
+    char buffer_[1048576];
     std::istream &input_;
     boost::function<void ( const std::string &prot, size_t len )> on_protein_;
     boost::function<void ( unsigned long kmer )> on_hit_;

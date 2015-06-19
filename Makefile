@@ -30,6 +30,7 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BOOST)/lib/libboost_filesystem.a \
 	$(BOOST)/lib/libboost_timer.a \
 	$(BOOST)/lib/libboost_chrono.a \
+	$(BOOST)/lib/libboost_iostreams.a \
 	$(THREADLIB)
 
 x: x.o

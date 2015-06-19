@@ -15,6 +15,8 @@ public:
     KmerPegMapping(const std::string &data_dir);
 
     void load_mapping_file(const std::string &mapping_file);
+    void load_compact_mapping_file(const std::string &mapping_file);
+    void load_compact_mapping_file(std::istream &kfile);
 
     typedef unsigned long encoded_id_t;
     typedef std::vector<encoded_id_t> id_set;

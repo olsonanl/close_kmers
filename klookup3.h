@@ -41,7 +41,7 @@ private:
     tcp::socket socket_;
     boost::asio::streambuf request_;
     boost::asio::streambuf response_;
-    char buffer_[4096];
+    char buffer_[1048576];
     boost::function<void ( const std::string &prot, size_t len )> on_protein_;
     boost::function<void ( unsigned long kmer )> on_hit_;
     boost::function<void ( const std::string &line )> on_call_;
