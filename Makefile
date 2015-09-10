@@ -15,9 +15,9 @@ endif
 
 default: kser
 
-OPT = -O2
+#OPT = -O2
 #OPT = -O2 -pg
-#OPT = -g
+OPT = -g
 # OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
 INC = -I$(BOOST)/include 
@@ -33,14 +33,19 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BOOST)/lib/libboost_iostreams.a \
 	$(THREADLIB)
 
+x.o: x.cc kguts.h
+
 x: x.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 kc: kc.o kmer.o kserver.o krequest.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-kser2: kser.o kmer.o kserver.o krequest.o klookup.o klookup2.o klookup3.o
+kser: kser.o kmer.o kserver.o krequest.o klookup.o klookup2.o klookup3.o kguts.o
 	$(CXX) $(LDFLAGS) $(OPT) -o kser2 $^ $(LIBS)
+
+kfile: kfile.o kguts.o fasta_parser.o
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 clean:
 	rm -f *.o kc kser
