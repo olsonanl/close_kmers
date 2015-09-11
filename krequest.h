@@ -22,7 +22,9 @@ class KmerRequest
 public:
     KmerRequest(boost::asio::io_service &io_service,
 		KmerPegMapping &mapping,
-		boost::asio::ip::tcp::endpoint &klookup_endpoint);
+		boost::asio::ip::tcp::endpoint &klookup_endpoint,
+		std::shared_ptr<KmerGuts> kguts
+	);
     ~KmerRequest();
 
     void do_read();
@@ -39,7 +41,7 @@ private:
     void handle_request();
 
     void process_request();
-    void request_complete( const KmerLookupClient::result_t &);
+    void request_complete();
 
     void write_response_complete(boost::system::error_code err);
     
@@ -56,6 +58,8 @@ private:
     std::string request_type_;
     std::string path_;
     std::map<std::string, std::string> headers_;
+
+    std::shared_ptr<KmerGuts> kguts_;
 
     boost::asio::io_service &io_service_;
     boost::asio::ip::tcp::socket socket_;
@@ -79,6 +83,7 @@ private:
     std::map<std::pair<KmerPegMapping::encoded_id_t, KmerPegMapping::encoded_id_t>, unsigned long> distance_;
 
     boost::asio::streambuf response_;
+    boost::asio::streambuf continue_response_;
     //framed_streambuf response_;
     std::ostream response_stream_;
     boost::timer::cpu_timer timer_;

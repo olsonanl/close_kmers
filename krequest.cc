@@ -5,11 +5,13 @@
 #include <algorithm>
 
 #include "klookup.h"
+#include "kguts.h"
 #include "global.h"
 
 KmerRequest::KmerRequest(boost::asio::io_service &io_service,
 			 KmerPegMapping &mapping,
-			 boost::asio::ip::tcp::endpoint &klookup_endpoint) :
+			 boost::asio::ip::tcp::endpoint &klookup_endpoint,
+			 std::shared_ptr<KmerGuts> kguts) :
     io_service_(io_service),
     socket_(io_service_),
     mapping_(mapping),
@@ -18,7 +20,8 @@ KmerRequest::KmerRequest(boost::asio::io_service &io_service,
     klookup_(0),
     klookup2_(0),
     response_stream_(&response_),
-    bytes_left_(0)
+    bytes_left_(0),
+    kguts_(kguts)
 {
 }
 
@@ -93,7 +96,18 @@ void KmerRequest::handle_read(boost::system::error_code err, size_t bytes)
 
 	if (done)
 	{
-	    handle_request();
+	    auto it = headers_.find("expect");
+	    if (it != headers_.end() && it->second == "100-continue")
+	    {
+		std::ostream os(&continue_response_);
+		os << "HTTP/1.1 100 Continue\n\n";
+		boost::asio::async_write(socket_, continue_response_,
+					 boost::bind(&KmerRequest::handle_request, this));
+	    }
+	    else
+	    {
+		handle_request();
+	    }
 	}
 	else
 	{
@@ -343,9 +357,12 @@ void KmerRequest::process_request()
 
     if (path_ == "/lookup")
     {
+	response_stream_ << "HTTP/1.1 200 OK\n";
+	response_stream_ << "Content-type: text/plain\n";
+	response_stream_ << "\n";
 	krequest_ = new std::istream(&request_);
-	klookup_ = new KmerLookupClient(io_service_, klookup_endpoint_, opts, *krequest_, mapping_,
-					boost::bind(&KmerRequest::request_complete, this, _1));
+	klookup_ = new KmerLookupClient(kguts_, response_stream_, *krequest_, mapping_,
+					boost::bind(&KmerRequest::request_complete, this));
     }
     else if (path_ == "/add")
     {
@@ -353,10 +370,8 @@ void KmerRequest::process_request()
 	response_stream_ << "Content-type: text/plain\n";
 	response_stream_ << "\n";
 
-	opts += " -d 1";
-
 	krequest_ = new std::istream(&request_);
-	klookup2_ = new KmerLookupClient2(io_service_, klookup_endpoint_, opts, *krequest_,
+	klookup2_ = new KmerLookupClient2(kguts_, *krequest_,
 					  boost::bind(&KmerRequest::on_protein, this, _1, _2),
 					  boost::bind(&KmerRequest::on_hit, this, _1),
 					  boost::bind(&KmerRequest::on_call, this, _1),
@@ -370,7 +385,7 @@ void KmerRequest::process_request()
 	response_stream_ << "\n";
 
 	krequest_ = new std::istream(&request_);
-	klookup2_ = new KmerLookupClient2(io_service_, klookup_endpoint_, opts, *krequest_,
+	klookup2_ = new KmerLookupClient2(kguts_, *krequest_,
 					  0,
 					  0,
 					  boost::bind(&KmerRequest::on_call, this, _1),
@@ -485,17 +500,8 @@ void KmerRequest::matrix_complete( const boost::system::error_code& err )
 }
 
 
-void KmerRequest::request_complete( const KmerLookupClient::result_t &resp)
+void KmerRequest::request_complete()
 {
-    response_stream_ << "HTTP/1.1 200 OK\n";
-    response_stream_ << "Content-type: text/plain\n";
-    response_stream_ << "\n";
-    
-    // Write response here and we're done but for cleanup
-    for (auto it = resp.begin(); it != resp.end(); it++)
-    {
-	response_stream_ << it->first << "\t" << it->second << "\n";
-    }
     boost::asio::async_write(socket_, response_,
 			     boost::bind(&KmerRequest::write_response_complete, this,
 					 boost::asio::placeholders::error));

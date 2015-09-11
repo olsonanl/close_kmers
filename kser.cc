@@ -55,8 +55,10 @@ int main(int argc, char* argv[])
 
     auto iter = resolver.resolve({khost, kport});
     boost::asio::ip::tcp::endpoint endpoint = *iter;
+
+    std::shared_ptr<KmerGuts> kguts = std::make_shared<KmerGuts>(kmer_data);
     
-    KmerRequestServer kserver(io_service, listen_port, listen_port_file, mapping, endpoint);
+    KmerRequestServer kserver(io_service, listen_port, listen_port_file, mapping, endpoint, kguts);
 
 //	  std::ifstream ifile(argv[3]);
 	  

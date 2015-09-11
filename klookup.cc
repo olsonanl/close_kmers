@@ -23,178 +23,68 @@ struct less_second : std::binary_function<T,T,bool>
 	}
 };  
 
-KmerLookupClient::KmerLookupClient(boost::asio::io_service& io_service,
-				   boost::asio::ip::tcp::endpoint endpoint,
-				   const std::string &kmer_options,
+
+KmerLookupClient::KmerLookupClient(std::shared_ptr<KmerGuts> kguts,
+				   std::ostream &response_stream,
 				   std::istream &input,
 				   KmerPegMapping &mapping,
-				   boost::function<void ( const result_t &)> on_completion)
-    : resolver_(io_service),
-      socket_(io_service),
-      kmer_options_(kmer_options),
+				   boost::function<void ( )> on_completion)
+    : kguts_(kguts),
+      response_stream_(response_stream),
       input_(input),
       mapping_(mapping),
-      on_completion_(on_completion)
+      on_completion_(on_completion),
+      fasta_parser_(std::bind(&KmerLookupClient::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2))
 {
-    std::ostream request_stream(&request_);
-    if (kmer_options_.empty())
-    {
-	request_stream << "-d 1 -a\n";
-    }
-    else
-    {
-	request_stream << kmer_options_ << "\n";
-    }
-
     timer_.start();
+    fasta_parser_.parse(input);
     
-    boost::asio::async_connect(socket_, &endpoint,
-			       boost::bind(&KmerLookupClient::handle_connect, this,
-					   boost::asio::placeholders::error));
+    on_completion_();
 }
 
-void KmerLookupClient::handle_connect(const boost::system::error_code& err)
+int KmerLookupClient::on_parsed_seq(const std::string &id, const std::string &seq)
 {
-    if (!err)
-    {
+    // std::cout << "on parsed " << id << std::endl;
+    kguts_->process_aa_seq(id.c_str(), seq.c_str(), seq.size(), 0, std::bind(&KmerLookupClient::on_hit, this, std::placeholders::_1), 0);
+    // std::cout << "done\n";
 
-	// The connection was successful. Send the request.
-	boost::asio::async_write(socket_, request_,
-				 boost::bind(&KmerLookupClient::handle_write_request, this,
-					     boost::asio::placeholders::error));
-	
-	//
-	// Also kick off a reader.
-	//
-	boost::asio::async_read_until(socket_, response_, "\n",
-				      boost::bind(&KmerLookupClient::handle_read, this,
-						  boost::asio::placeholders::error,
-						  boost::asio::placeholders::bytes_transferred));
-	
-	
-    }
-    else
+    typedef std::pair<std::string, unsigned int> data_t;
+
+    std::vector<data_t> vec;
+    for (auto it = hit_count_.begin(); it != hit_count_.end(); it++)
     {
-	std::cout << "Error: " << err.message() << "\n";
+	std::string peg = mapping_.decode_id(it->first);
+	vec.push_back(data_t(peg, it->second));
     }
+
+    std::sort(vec.begin(), vec.end(), less_second<data_t>()); 
+
+    response_stream_ << id << "\n";
+    for (auto it = vec.begin(); it != vec.end(); it++)
+    {
+	response_stream_ << it->first << "\t" << it->second << "\n";
+    }
+    response_stream_ << "//\n";
+
+    hit_count_.clear();
+
+    return 0;
 }
 
-void KmerLookupClient::handle_write_request(const boost::system::error_code& err)
+void KmerLookupClient::on_hit(KmerGuts::sig_kmer_t &hit)
 {
-    if (!err)
+    // std::cout << "on hit " << hit.which_kmer << " " << hit.function_index << "\n";
+
+    auto ki = mapping_.kmer_to_id_.find(hit.which_kmer);
+    if (ki != mapping_.kmer_to_id_.end())
     {
-	//
-	// check for EOF from last time
-	//
-	if (!input_)
+	// std::cout << "got mapping for " << hit.which_kmer << "\n";
+	for (auto it = ki->second.begin(); it != ki->second.end(); it++)
 	{
-	    std::ostream request_stream(&request_);
-	    request_stream << ">FLUSH\n";
-	    
-	    boost::asio::async_write(socket_, request_,
-				     boost::bind(&KmerLookupClient::finish_write_request, this,
-						 boost::asio::placeholders::error));
-	    return;
-	}
-	
-	//
-	// Read next block from the file and initiate write.
-	//
-	input_.read(buffer_, sizeof(buffer_));
-	
-	if (input_.gcount() > 0)
-	{
-	    // std::cout << "write " << input_.gcount() << "\n";
-	    
-	    boost::asio::async_write(socket_, boost::asio::buffer(buffer_, input_.gcount()),
-				     boost::bind(&KmerLookupClient::handle_write_request, this,
-						 boost::asio::placeholders::error));
+	    // std::cout << "  " << *it << "\n";
+
+	    hit_count_[*it]++;
 	}
     }
-    else
-    {
-	std::cout << "Error: " << err.message() << "\n";
-    }
 }
 
-void KmerLookupClient::finish_write_request(const boost::system::error_code& err)
-{
-    if (!err)
-    {
-    }
-    else
-    {
-	std::cout << "Error: " << err.message() << "\n";
-    }
-}
-
-void KmerLookupClient::handle_read(const boost::system::error_code& err, size_t bytes_transferred)
-{
-    if (!err)
-    {
-//		std::cout << "Handle read " << bytes_transferred << ":\n";
-
-	std::istream resp(&response_);
-	std::string line;
-	if (std::getline(resp, line, '\n'))
-	{
-	    std::string h;
-	    unsigned long offset, kmer;
-	    std::stringstream s(line);
-	    s >> h;
-	    
-	    if (h == "HIT")
-	    {
-		s >> offset;
-		s >> kmer;
-		
-		auto ki = mapping_.kmer_to_id_.find(kmer);
-		if (ki != mapping_.kmer_to_id_.end())
-		{
-		    // std::cout << "got mapping for " << kmer << "\n";
-		    for (auto it = ki->second.begin(); it != ki->second.end(); it++)
-		    {
-			// std::cout << "  " << *it << "\n";
-			
-			hit_count_[*it]++;
-		    }
-		}
-	    }
-	    else if (h == "OTU-COUNTS")
-	    {
-		typedef std::pair<std::string, unsigned int> data_t;
-
-		std::vector<data_t> vec;
-		for (auto it = hit_count_.begin(); it != hit_count_.end(); it++)
-		{
-		    std::string peg = mapping_.decode_id(it->first);
-		    vec.push_back(data_t(peg, it->second));
-		}
-
-		std::sort(vec.begin(), vec.end(), less_second<data_t>()); 
-		
-		for (auto it = vec.begin(); it != vec.end(); it++)
-		{
-		    std::cout << it->first << ": " << it->second  << "\n";
-		}
-
-		std::cout << "at receipt of finished results " << g_timer.format();
-		socket_.close();
-		on_completion_(vec);
-		return;
-	    }
-	    else
-	    {
-		std::cout << line << "\n";
-	    }
-	}
-	boost::asio::async_read_until(socket_, response_, "\n",
-				      boost::bind(&KmerLookupClient::handle_read, this,
-						  boost::asio::placeholders::error,
-						  boost::asio::placeholders::bytes_transferred));
-    }
-    else
-    {
-	std::cout << "Error: " << err << "\n";
-    }
-};

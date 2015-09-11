@@ -22,7 +22,8 @@ public:
 		      const std::string &port,
 		      const std::string &port_file,
 		      KmerPegMapping &mapping,
-		      boost::asio::ip::tcp::endpoint &klookup_endpoint);
+		      boost::asio::ip::tcp::endpoint &klookup_endpoint,
+		      std::shared_ptr<KmerGuts> kguts);
 
 private:
 
@@ -30,6 +31,7 @@ private:
     void on_accept(boost::system::error_code ec, KmerRequest *);
     
     void do_await_stop();
+    std::shared_ptr<KmerGuts> kguts_;
     boost::asio::io_service &io_service_;
     boost::asio::ip::tcp::acceptor acceptor_;
     boost::asio::signal_set signals_;

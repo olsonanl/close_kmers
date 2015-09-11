@@ -509,7 +509,7 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
      */
     int flags = MAP_SHARED;
     #ifdef MAP_POPULATE
-    // flags |= MAP_POPULATE;
+    flags |= MAP_POPULATE;
     #endif
     
     image = (kmer_memory_image_t *) mmap((caddr_t)0, file_size, PROT_READ, flags, fd, 0);

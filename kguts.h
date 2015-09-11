@@ -1,3 +1,6 @@
+#ifndef _kmer_guts_h
+#define _kmer_guts_h
+
 /*
 
 kmer_guts.c can be compiled into either a 5-mer or an 8-mer version.  I have 
@@ -329,3 +332,5 @@ private:
 
 };
 
+
+#endif /* _kmer_guts_h */

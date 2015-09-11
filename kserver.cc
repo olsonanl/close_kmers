@@ -11,14 +11,16 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 				     const std::string &port,
 				     const std::string &port_file,
 				     KmerPegMapping &mapping,
-				     boost::asio::ip::tcp::endpoint &klookup_endpoint) :
+				     boost::asio::ip::tcp::endpoint &klookup_endpoint,
+				     std::shared_ptr<KmerGuts> kguts) :
     io_service_(io_service),
     acceptor_(io_service_),
     port_(port),
     port_file_(port_file),
     signals_(io_service_),
     mapping_(mapping),
-    klookup_endpoint_(klookup_endpoint)
+    klookup_endpoint_(klookup_endpoint),
+    kguts_(kguts)
 {
 
     /*
@@ -52,7 +54,7 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 
 void KmerRequestServer::do_accept()
 {
-    KmerRequest *r = new KmerRequest(io_service_, mapping_, klookup_endpoint_);
+    KmerRequest *r = new KmerRequest(io_service_, mapping_, klookup_endpoint_, kguts_);
     acceptor_.async_accept(r->socket(),
 			   boost::bind(&KmerRequestServer::on_accept, this,
 				       boost::asio::placeholders::error, r));

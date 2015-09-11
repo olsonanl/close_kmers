@@ -7,6 +7,8 @@
 #include <iostream>
 #include <string>
 #include "kmer.h"
+#include "kguts.h"
+#include "fasta_parser.h"
 
 using namespace boost::asio::ip;
 
@@ -15,9 +17,7 @@ class KmerLookupClient2
 public:
     typedef std::vector<std::pair<std::string, unsigned int>> result_t;
 
-    KmerLookupClient2(boost::asio::io_service& io_service,
-		      boost::asio::ip::tcp::endpoint,
-		      const std::string &kmer_options,
+    KmerLookupClient2(std::shared_ptr<KmerGuts> kguts,
 		      std::istream &input,
 		      boost::function<void ( const std::string &prot, size_t len )> on_protein,
 		      boost::function<void ( unsigned long kmer )> on_hit,
@@ -25,17 +25,11 @@ public:
 		      boost::function<void ( const boost::system::error_code& err)> on_completion);
 
 private:
-    void handle_resolve(const boost::system::error_code& err,
-			tcp::resolver::iterator endpoint_iterator);
-    void handle_connect(const boost::system::error_code& err);
+    int on_parsed_seq(const std::string &id, const std::string &seq);
+    void on_hit(KmerGuts::sig_kmer_t &hit);
 
-    void handle_write_request(const boost::system::error_code& err);
-    void finish_write_request(const boost::system::error_code& err);
-    void handle_read(const boost::system::error_code& err, size_t bytes_transferred);
-
-    tcp::resolver resolver_;
-    tcp::socket socket_;
-    std::string kmer_options_;
+    FastaParser fasta_parser_;
+    std::shared_ptr<KmerGuts> kguts_;
     boost::asio::streambuf request_;
     boost::asio::streambuf response_;
     char buffer_[1048576];

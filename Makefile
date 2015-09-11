@@ -41,7 +41,7 @@ x: x.o
 kc: kc.o kmer.o kserver.o krequest.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-kser: kser.o kmer.o kserver.o krequest.o klookup.o klookup2.o klookup3.o kguts.o
+kser: kser.o kmer.o kserver.o krequest.o klookup.o klookup2.o klookup3.o kguts.o fasta_parser.o
 	$(CXX) $(LDFLAGS) $(OPT) -o kser2 $^ $(LIBS)
 
 kfile: kfile.o kguts.o fasta_parser.o
