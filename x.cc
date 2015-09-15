@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <boost/regex.hpp>
 #include "kguts.h"
 
 void doit(KmerGuts::sig_kmer_t &x)
@@ -32,6 +33,40 @@ struct less_second : std::binary_function<T,T,bool>
 
 int main(int argc, char **argv)
 {
+    const boost::regex url_regex("^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\\?([^#]*))?(#(.*))?");
+    const boost::regex path_regex("^([^?#]*)(\\?([^#]*))?(#(.*))?");
+    const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(\\d+\\.\\d+)");
+
+    try {
+	int v = std::stoi("");
+    
+	std::cout << v;
+    } catch (const std::invalid_argument& ia)
+    {
+	std::cout << " erorr: " << ia.what() << "\n";
+    }
+
+    #if 0
+
+    std::string l;
+    while (std::getline(std::cin, l))
+    {
+	boost::smatch what;
+	if (boost::regex_match(l, what, request_regex))
+	{
+	    for (auto it = what.begin(); it != what.end(); it++)
+	    {
+		std::cout << "'" << *it << "'\n";
+	    }
+	}
+	else
+	{
+	    std::cout << "No. '" << l << "'\n";
+	}
+	    
+    }
+    #endif
+
     std::map<int, int> mm;
 
     mm[3]++;

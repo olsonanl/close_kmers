@@ -24,7 +24,8 @@ public:
 		      boost::function<void ( const std::string &prot, size_t len )> on_protein,
 		      boost::function<void ( unsigned long kmer )> on_hit,
 		      boost::function<void ( const std::string &line )> on_call,
-		      boost::function<void ( const boost::system::error_code& err)> on_completion);
+		      boost::function<void ( const boost::system::error_code& err)> on_completion,
+		      std::map<std::string, std::string> &parameters);
     void check_queue();
 
 
@@ -37,6 +38,7 @@ private:
     void finish_write_request(const boost::system::error_code& err);
     void handle_read(const boost::system::error_code& err, size_t bytes_transferred);
 
+    std::map<std::string, std::string> parameters_;
     tcp::resolver resolver_;
     tcp::socket socket_;
     boost::asio::streambuf request_;

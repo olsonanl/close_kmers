@@ -138,13 +138,13 @@ COMMAND LINE ARGUMENTS:
 #include <functional>
 #include <algorithm>
 
-#define K 8
+#define KMER_SIZE 8
 #define MAX_SEQ_LEN 500000000
 
-#if K == 5 
+#if KMER_SIZE == 5 
 const CORE = 20L*20L*20L*20L;
 #endif
-#if K == 8
+#if KMER_SIZE == 8
 const unsigned long long CORE = 20L*20L*20L*20L*20L*20L*20L;
 #endif
 

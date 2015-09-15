@@ -224,13 +224,13 @@ void KmerGuts::rev_comp(const char *data,char *cdata) {
 unsigned long long KmerGuts::encoded_kmer(unsigned char *p) {
   unsigned long long encodedK = *p;
   int i;
-  for (i=1; (i <= K-1); i++) {
+  for (i=1; (i <= KMER_SIZE-1); i++) {
     encodedK = (encodedK * 20) + *(p+i);
   }
 
   if (encodedK > MAX_ENCODED) {
     fprintf(stderr,"bad encoding - input must have included invalid characters\n");
-    for (i=0; (i < K); i++) {
+    for (i=0; (i < KMER_SIZE); i++) {
       fprintf(stderr,"%d ",*(p+i));
     }
     fprintf(stderr,"\n");
@@ -241,9 +241,9 @@ unsigned long long KmerGuts::encoded_kmer(unsigned char *p) {
 
 unsigned long long KmerGuts::encoded_aa_kmer(char *p)
 {
-  unsigned char aa_off[K];
+  unsigned char aa_off[KMER_SIZE];
   int j;
-  for (j=0; (j < K); j++) {
+  for (j=0; (j < KMER_SIZE); j++) {
     int prot_c = *(p+j);
     aa_off[j] = to_amino_acid_off(prot_c);
   }
@@ -253,10 +253,10 @@ unsigned long long KmerGuts::encoded_aa_kmer(char *p)
 void KmerGuts::decoded_kmer(unsigned long long encodedK,char *decoded) {
   
   int i;
-  *(decoded+K) = '\0';
+  *(decoded+KMER_SIZE) = '\0';
   unsigned long long x = encodedK;
 
-  for (i=K-1; (i >= 0); i--) {
+  for (i=KMER_SIZE-1; (i >= 0); i--) {
     *(decoded+i) = prot_alpha[x % 20];
     x = x / 20;
   }
@@ -415,7 +415,7 @@ KmerGuts::kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long
   for (i=0; (i < size_hash); i++)
     sig_kmers[i].which_kmer = MAX_ENCODED + 1;
 
-  char kmer_string[K+1];
+  char kmer_string[KMER_SIZE+1];
   int end_off;
   int fI;
   float f_wt;
@@ -509,7 +509,7 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
      */
     int flags = MAP_SHARED;
     #ifdef MAP_POPULATE
-    flags |= MAP_POPULATE;
+    // flags |= MAP_POPULATE;
     #endif
     
     image = (kmer_memory_image_t *) mmap((caddr_t)0, file_size, PROT_READ, flags, fd, 0);
@@ -552,7 +552,7 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
 
 void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
 
-  if (K == 5) {
+  if (KMER_SIZE == 5) {
     while (((*p) < bound) &&
 	   ((*(*p) == 20)     || 
             (*((*p)+1) == 20) || 
@@ -562,7 +562,7 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
       (*p)++;
     }
   }
-  else {   /*  ##### ASSUMING K == 8 #### */
+  else {   /*  ##### ASSUMING KMER_SIZE == 8 #### */
     int bad = 1;
     while ((*p < bound) && (bad == 1)) {
       bad = 0;
@@ -623,7 +623,7 @@ void KmerGuts::process_set_of_hits(std::shared_ptr<std::vector<KmerCall>> calls,
     if ((fI_count >= min_hits) && (weighted_hits >= min_weighted_hits))
     {
 	if (calls)
-	    calls->push_back({ hits[0].from0_in_prot, hits[last_hit].from0_in_prot+(K-1), fI_count, current_fI, weighted_hits });
+	    calls->push_back({ hits[0].from0_in_prot, hits[last_hit].from0_in_prot+(KMER_SIZE-1), fI_count, current_fI, weighted_hits });
 
 	/* once we have decided to call a region, we take the kmers for fI and
 	   add them to the counts maintained to assign an OTU to the sequence */
@@ -660,7 +660,7 @@ void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq
     unsigned char *p = pIseq;
     /* pseq and pIseq are the same length */
 
-    unsigned char *bound = pIseq + strlen(pseq) - K;
+    unsigned char *bound = pIseq + strlen(pseq) - KMER_SIZE;
     advance_past_ambig(&p,bound);
     unsigned long long encodedK=0;
     if (p < bound) {
@@ -717,11 +717,11 @@ void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq
 	}
 	p++;
 	if (p < bound) {
-	    if (*(p+K-1) < 20) {
-		encodedK = ((encodedK % CORE) * 20L) + *(p+K-1);
+	    if (*(p+KMER_SIZE-1) < 20) {
+		encodedK = ((encodedK % CORE) * 20L) + *(p+KMER_SIZE-1);
 	    }
 	    else {
-		p += K;
+		p += KMER_SIZE;
 		advance_past_ambig(&p,bound);
 		if (p < bound) {
 		    encodedK = encoded_kmer(p);

@@ -20,9 +20,11 @@ KmerLookupClient3::KmerLookupClient3(boost::asio::io_service& io_service,
 				     boost::function<void ( const std::string &prot, size_t len )> on_protein,
 				     boost::function<void ( unsigned long kmer )> on_hit,
 				     boost::function<void ( const std::string &line )> on_call,
-				     boost::function<void ( const boost::system::error_code& err )> on_completion)
+				     boost::function<void ( const boost::system::error_code& err )> on_completion,
+				     std::map<std::string, std::string> &parameters)
     : resolver_(io_service),
       socket_(io_service),
+      parameters_(parameters),
       on_protein_(on_protein),
       on_hit_(on_hit),
       on_call_(on_call),

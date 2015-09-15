@@ -25,8 +25,14 @@ public:
 
     std::map<std::string, encoded_id_t> genome_to_id_;
     std::map<encoded_id_t, std::string> id_to_genome_;
-	    
+
+    /* The kmer to peg mapping table. This is huge. */
+       
     std::unordered_map<encoded_id_t, id_set> kmer_to_id_;
+
+    /* peg to peg-attributes mapping. */
+    std::unordered_map<encoded_id_t, std::pair<std::string, std::string>> family_mapping_;
+    void load_families(const std::string &families_file);
 
     encoded_id_t encode_id(const std::string peg);
     encoded_id_t encode_id(const std::string &genome, const std::string &peg);
@@ -35,6 +41,7 @@ public:
 
     std::string decode_id(encoded_id_t id);
 
+    unsigned long kcount_;
     unsigned long next_genome_id_;
 };
 

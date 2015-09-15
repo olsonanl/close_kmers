@@ -56,10 +56,6 @@ void FastaParser::parse(std::istream &stream)
 	    {
 		s = s_data;
 	    }
-	    else
-	    {
-		cur_id.push_back(c);
-	    }
 	    break;
 
 	case s_data:

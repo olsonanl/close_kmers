@@ -28,14 +28,24 @@ KmerLookupClient::KmerLookupClient(std::shared_ptr<KmerGuts> kguts,
 				   std::ostream &response_stream,
 				   std::istream &input,
 				   KmerPegMapping &mapping,
-				   boost::function<void ( )> on_completion)
+				   boost::function<void ( )> on_completion,
+				   std::map<std::string, std::string> &parameters)
     : kguts_(kguts),
+      parameters_(parameters),
       response_stream_(response_stream),
       input_(input),
       mapping_(mapping),
       on_completion_(on_completion),
-      fasta_parser_(std::bind(&KmerLookupClient::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2))
+      fasta_parser_(std::bind(&KmerLookupClient::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
+      kmer_hit_threshold_(100)
 {
+    try {
+	kmer_hit_threshold_ = std::stoi(parameters_["kmer_hit_threhsold"]);
+    } catch (const std::invalid_argument& ia)
+    {
+    }
+
+
     timer_.start();
     fasta_parser_.parse(input);
     
@@ -48,13 +58,12 @@ int KmerLookupClient::on_parsed_seq(const std::string &id, const std::string &se
     kguts_->process_aa_seq(id.c_str(), seq.c_str(), seq.size(), 0, std::bind(&KmerLookupClient::on_hit, this, std::placeholders::_1), 0);
     // std::cout << "done\n";
 
-    typedef std::pair<std::string, unsigned int> data_t;
+    typedef std::pair<KmerPegMapping::encoded_id_t, unsigned int> data_t;
 
     std::vector<data_t> vec;
     for (auto it = hit_count_.begin(); it != hit_count_.end(); it++)
     {
-	std::string peg = mapping_.decode_id(it->first);
-	vec.push_back(data_t(peg, it->second));
+	vec.push_back(*it);
     }
 
     std::sort(vec.begin(), vec.end(), less_second<data_t>()); 
@@ -62,7 +71,17 @@ int KmerLookupClient::on_parsed_seq(const std::string &id, const std::string &se
     response_stream_ << id << "\n";
     for (auto it = vec.begin(); it != vec.end(); it++)
     {
-	response_stream_ << it->first << "\t" << it->second << "\n";
+//	if (it->second < kmer_hit_threshold_)
+//	    break;
+	std::string peg = mapping_.decode_id(it->first);
+	response_stream_ << peg << "\t" << it->second;
+	auto fhit = mapping_.family_mapping_.find(it->first);
+
+	if (fhit != mapping_.family_mapping_.end())
+	{
+	    response_stream_ << "\t" << fhit->second.first << "\t" << fhit->second.second;
+	}
+	response_stream_ << "\n";
     }
     response_stream_ << "//\n";
 

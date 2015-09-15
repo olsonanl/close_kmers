@@ -21,7 +21,8 @@ public:
 		     std::ostream &response_stream,
 		     std::istream &input,
 		     KmerPegMapping &mapping,
-		     boost::function<void ( )> on_completion);
+		     boost::function<void ( )> on_completion,
+		     std::map<std::string, std::string> &parameters);
 
 private:
     std::shared_ptr<KmerGuts> kguts_;
@@ -30,12 +31,15 @@ private:
     KmerPegMapping &mapping_;
     FastaParser fasta_parser_;
     std::map<KmerPegMapping::encoded_id_t, unsigned int> hit_count_;
+    std::map<std::string, std::string> parameters_;
 
     int on_parsed_seq(const std::string &id, const std::string &seq);
     void on_hit(KmerGuts::sig_kmer_t &hit);
 
     boost::function<void ( )> on_completion_;
     boost::timer::cpu_timer timer_;
+
+    int kmer_hit_threshold_;
 };
 
 #endif

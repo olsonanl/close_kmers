@@ -57,6 +57,9 @@ private:
 
     std::string request_type_;
     std::string path_;
+    std::string parameters_raw_;
+    std::string fragment_;
+    std::map<std::string, std::string> parameters_;
     std::map<std::string, std::string> headers_;
 
     std::shared_ptr<KmerGuts> kguts_;

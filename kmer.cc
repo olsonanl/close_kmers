@@ -11,6 +11,7 @@
 #include <boost/asio/write.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include "popen.h"
 
@@ -34,7 +35,8 @@ std::vector<std::string> split(const std::string &s, char delim) {
 
 KmerPegMapping::KmerPegMapping(const std::string &data_dir) :
     data_dir_(data_dir),
-    next_genome_id_(0)
+    next_genome_id_(0),
+    kcount_(0)
 {
     std::string genome_file = data_dir_ + "/genomes";
     std::ifstream gfile(genome_file);
@@ -52,10 +54,11 @@ KmerPegMapping::KmerPegMapping(const std::string &data_dir) :
 	unsigned long id = next_genome_id_++;
 	genome_to_id_[genome] = id;
 	id_to_genome_[id] = genome;
-	
     }
 
     gfile.close();
+
+    kmer_to_id_.reserve(4000000000);
 }
 
 void KmerPegMapping::load_mapping_file(const std::string &mapping_file)
@@ -149,7 +152,7 @@ void KmerPegMapping::add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long
     {
 	auto n = kmer_to_id_.emplace(std::make_pair(kmer, id_set()));
 	// std::cout << "Alloc new for " << kmer << "\n";
-	n.first->second.reserve(512);
+	n.first->second.reserve(2);
 	n.first->second.push_back(enc);
     }
     else
@@ -157,6 +160,10 @@ void KmerPegMapping::add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long
 	// std::cout << "reuse " << kmer << "\n";
 	it->second.push_back(enc);
     }
+    kcount_++;
+    if (kcount_ % 1000000 == 0)
+	std::cerr << kmer_to_id_.size() << " entries with " << kcount_ << " values load-factor " << kmer_to_id_.load_factor() << "\n";
+    
 }
 
 KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string peg)
@@ -195,3 +202,43 @@ std::string KmerPegMapping::decode_id(encoded_id_t id)
     unsigned int peg = id & 0x7fff;
     return "fig|" + g + ".peg." + std::to_string((long long) peg);
 }
+
+/*
+ * Load a PATRIC families global-fams file and set up the global and local family attributes.
+ *
+ * Columns:
+ * 0 	global family
+ * 1	fams merged
+ * 2 	genera merged
+ * 3	peg id
+ * 4	protein length
+ * 5 	family function
+ * 6	local family number
+ * 7	genus
+ * 8 	local family number again
+ *
+ * GF00000000	28	21	fig|1049789.4.peg.4658	250	(2-pyrone-4,6-)dicarboxylic acid hydrolase	11358	Leptospira 11358
+ *
+ */
+void KmerPegMapping::load_families(const std::string &families_file)
+{
+    std::ifstream f(families_file);
+    std::string line;
+    std::string zeros("00000000");
+    while (std::getline(f, line))
+    {
+	std::vector<std::string> cols;
+	boost::split(cols, line, boost::is_any_of("\t"));
+
+	std::string pgf("PGF_");
+	pgf += cols[0].substr(2);
+	std::string plf("PLF_");
+	plf += cols[7];
+	plf += "_";
+	plf += zeros.substr(0, 8 - cols[8].size());
+	plf += cols[8];
+	encoded_id_t id = encode_id(cols[3]);
+	family_mapping_[id] = std::make_pair(pgf, plf);
+    }
+}
+

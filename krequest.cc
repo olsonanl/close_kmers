@@ -2,11 +2,20 @@
 #include <iostream>
 #include <sstream>
 #include <boost/bind.hpp>
+#include <boost/regex.hpp>
+#include <boost/algorithm/string.hpp>
 #include <algorithm>
 
 #include "klookup.h"
 #include "kguts.h"
 #include "global.h"
+
+const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(\\d+\\.\\d+)");
+/* $1 = type
+ * $2 = path
+ * $4 = parameters
+ * $6 = fragment
+ */
 
 KmerRequest::KmerRequest(boost::asio::io_service &io_service,
 			 KmerPegMapping &mapping,
@@ -77,8 +86,41 @@ void KmerRequest::handle_read(boost::system::error_code err, size_t bytes)
 	    }
 	    else if (request_type_.empty())
 	    {
-		ss >> request_type_;
-		ss >> path_;
+		boost::smatch match;
+		if (boost::regex_match(line, match, request_regex))
+		{
+		    request_type_ = match[1];
+		    path_ = match[2];
+		    parameters_raw_ = match[4];
+		    fragment_ = match[6];
+
+		    if (!parameters_raw_.empty())
+		    {
+			std::vector<std::string> parts;
+			boost::split(parts, parameters_raw_, boost::is_any_of(";&"));
+			for (auto it : parts)
+			{
+			    size_t pos = it.find('=');
+			    if (pos != std::string::npos)
+			    {
+				parameters_[it.substr(0, pos)] = it.substr(pos+1);
+			    }
+			}
+			/*
+			for (auto it : parameters_)
+			{
+			    std::cout << "'" << it.first << "': '" << it.second << "'\n";
+			}
+			*/
+		    }
+		    // std::cout << "req=" << request_type_ << " path=" << path_ << "\n";
+		}
+		else
+		{
+		    std::cout << "Invalid request '" << line << "'\n";
+		    socket_.close();
+		    delete this;
+		}
 	    }
 	    else
 	    {
@@ -127,7 +169,36 @@ void KmerRequest::handle_request()
 {
     if (request_type_ == "GET")
     {
-	// send_response("kmer service\n");
+	if (path_ == "/dump_mapping")
+	{
+	    response_stream_ << "HTTP/1.1 200 OK\n";
+	    response_stream_ << "Content-type: text/plain\n";
+	    response_stream_ << "\n";
+	    for (auto it: mapping_.kmer_to_id_)
+	    {
+		response_stream_ << it.first << "\t";
+		for (auto elt: it.second)
+		{
+		    response_stream_ << " " << elt;
+		}
+		response_stream_ << "\n";
+	    }
+	    for (auto it: mapping_.family_mapping_)
+	    {
+		response_stream_ << it.first << "\t" << it.second.first << "\t" << it.second.second << "\n";
+	    }
+	}
+	else
+	{
+	    response_stream_ << "HTTP/1.1 404 not found\n";
+	    response_stream_ << "Content-type: text/plain\n";
+	    response_stream_ << "\n";
+	}
+	    
+	boost::asio::async_write(socket_, response_,
+				 boost::bind(&KmerRequest::write_response_complete, this,
+					     boost::asio::placeholders::error));
+	return;
     }
     else if (request_type_ == "POST")
     {
@@ -150,7 +221,8 @@ void KmerRequest::handle_request()
 					 boost::bind(&KmerRequest::on_matrix_protein, this, _1, _2),
 					 boost::bind(&KmerRequest::on_matrix_hit, this, _1),
 					 0,
-					 boost::bind(&KmerRequest::matrix_complete, this, _1)));
+					 boost::bind(&KmerRequest::matrix_complete, this, _1),
+					 parameters_));
 	    klookup3_ = kc;
     
 	    auto kv = headers_.find("content-length");
@@ -362,7 +434,8 @@ void KmerRequest::process_request()
 	response_stream_ << "\n";
 	krequest_ = new std::istream(&request_);
 	klookup_ = new KmerLookupClient(kguts_, response_stream_, *krequest_, mapping_,
-					boost::bind(&KmerRequest::request_complete, this));
+					boost::bind(&KmerRequest::request_complete, this),
+					parameters_);
     }
     else if (path_ == "/add")
     {
@@ -371,12 +444,13 @@ void KmerRequest::process_request()
 	response_stream_ << "\n";
 
 	krequest_ = new std::istream(&request_);
+
 	klookup2_ = new KmerLookupClient2(kguts_, *krequest_,
 					  boost::bind(&KmerRequest::on_protein, this, _1, _2),
 					  boost::bind(&KmerRequest::on_hit, this, _1),
 					  boost::bind(&KmerRequest::on_call, this, _1),
-					  boost::bind(&KmerRequest::add_complete, this, _1));
-					
+					  boost::bind(&KmerRequest::add_complete, this, _1),
+					  parameters_);
     }
     else if (path_ == "/query")
     {
@@ -389,7 +463,8 @@ void KmerRequest::process_request()
 					  0,
 					  0,
 					  boost::bind(&KmerRequest::on_call, this, _1),
-					  boost::bind(&KmerRequest::add_complete, this, _1));
+					  boost::bind(&KmerRequest::add_complete, this, _1),
+					  parameters_);
 					
     }
     else

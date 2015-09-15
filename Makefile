@@ -2,7 +2,8 @@
 ifeq ($(wildcard /Library),) 
 
 CXX = /opt/rh/devtoolset-2/root/usr/bin/g++
-BOOST = /scratch/olson/boost
+BOOST = /scratch/olson/boost-1.59.0
+#BOOST = /scratch/olson/boost
 STDCPP = -std=c++0x 
 THREADLIB = -lpthread -lrt
 
@@ -17,7 +18,7 @@ default: kser
 
 #OPT = -O2
 #OPT = -O2 -pg
-OPT = -g
+OPT = -g -O2
 # OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
 INC = -I$(BOOST)/include 
@@ -31,6 +32,8 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BOOST)/lib/libboost_timer.a \
 	$(BOOST)/lib/libboost_chrono.a \
 	$(BOOST)/lib/libboost_iostreams.a \
+	$(BOOST)/lib/libboost_regex.a \
+	$(BOOST)/lib/libboost_program_options.a \
 	$(THREADLIB)
 
 x.o: x.cc kguts.h
