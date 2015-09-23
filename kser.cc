@@ -8,6 +8,10 @@
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 
+#ifdef GPROFILER
+#include <gperftools/profiler.h>
+#endif
+
 #define DEFINE_GLOBALS 1
 #include "global.h"
 
@@ -109,7 +113,17 @@ int main(int argc, char* argv[])
 //	  std::ifstream ifile(argv[3]);
 	  
 //	  client c(io_service, argv[1], argv[2], ifile, mapping);
-	  io_service.run();
 
-      return 0;
+    #ifdef GPROFILER
+    std::cout << "profiler enable\n";
+    ProfilerStart("prof.out");
+    #endif
+    io_service.run();
+
+    #ifdef GPROFILER
+    ProfilerStop();
+    std::cout << "profiler disable\n";
+    #endif
+
+    return 0;
 }

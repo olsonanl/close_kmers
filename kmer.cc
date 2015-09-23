@@ -59,7 +59,15 @@ KmerPegMapping::KmerPegMapping(const std::string &data_dir) :
     gfile.close();
 
     kmer_to_id_.reserve(4000000000);
+
+    std::cout << "Constructed KmerPegMapping\n";
 }
+
+KmerPegMapping::~KmerPegMapping()
+{
+    std::cout << "Destroyed KmerPegMapping\n";
+}
+
 
 void KmerPegMapping::load_mapping_file(const std::string &mapping_file)
 {
@@ -238,7 +246,7 @@ void KmerPegMapping::load_families(const std::string &families_file)
 	plf += zeros.substr(0, 8 - cols[8].size());
 	plf += cols[8];
 	encoded_id_t id = encode_id(cols[3]);
-	family_mapping_[id] = std::make_pair(pgf, plf);
+	family_mapping_.emplace(std::make_pair(id, family_data(pgf, plf, cols[5])));
     }
 }
 

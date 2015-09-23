@@ -371,14 +371,13 @@ long long KmerGuts::find_empty_hash_entry(sig_kmer_t sig_kmers[],unsigned long l
 
 long long KmerGuts::lookup_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK) {
     long long  hash_entry = encodedK % size_hash;
-    if (debug >= 2)
-      tot_lookups++;
-    while ((sig_kmers[hash_entry].which_kmer <= MAX_ENCODED) && (sig_kmers[hash_entry].which_kmer != encodedK)) {
-      if (debug >= 2)
-	retry++;
+    while ((sig_kmers[hash_entry].which_kmer != encodedK) && (sig_kmers[hash_entry].which_kmer <= MAX_ENCODED)) {
+      hash_entry = (hash_entry+1)%size_hash;
+/*
       hash_entry++;
       if (hash_entry == size_hash)
 	hash_entry = 0;
+*/
     }
     if (sig_kmers[hash_entry].which_kmer > MAX_ENCODED) {
       return -1;
@@ -508,10 +507,11 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
      * Memory map.
      */
     int flags = MAP_SHARED;
+
     #ifdef MAP_POPULATE
     // flags |= MAP_POPULATE;
     #endif
-    
+
     image = (kmer_memory_image_t *) mmap((caddr_t)0, file_size, PROT_READ, flags, fd, 0);
 
     if (image == (kmer_memory_image_t *)(-1)) {

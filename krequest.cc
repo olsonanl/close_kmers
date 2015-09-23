@@ -169,6 +169,11 @@ void KmerRequest::handle_request()
 {
     if (request_type_ == "GET")
     {
+	if (path_ == "/quit")
+	{
+	    socket_.close();
+	    io_service_.stop();
+	}
 	if (path_ == "/dump_mapping")
 	{
 	    response_stream_ << "HTTP/1.1 200 OK\n";
@@ -185,7 +190,7 @@ void KmerRequest::handle_request()
 	    }
 	    for (auto it: mapping_.family_mapping_)
 	    {
-		response_stream_ << it.first << "\t" << it.second.first << "\t" << it.second.second << "\n";
+		response_stream_ << it.first << "\t" << it.second.pgf << "\t" << it.second.plf << "\t" << it.second.function << "\n";
 	    }
 	}
 	else

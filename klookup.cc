@@ -71,15 +71,15 @@ int KmerLookupClient::on_parsed_seq(const std::string &id, const std::string &se
     response_stream_ << id << "\n";
     for (auto it = vec.begin(); it != vec.end(); it++)
     {
-//	if (it->second < kmer_hit_threshold_)
-//	    break;
+	if (it->second < kmer_hit_threshold_)
+	    break;
 	std::string peg = mapping_.decode_id(it->first);
 	response_stream_ << peg << "\t" << it->second;
 	auto fhit = mapping_.family_mapping_.find(it->first);
 
 	if (fhit != mapping_.family_mapping_.end())
 	{
-	    response_stream_ << "\t" << fhit->second.first << "\t" << fhit->second.second;
+	    response_stream_ << "\t" << fhit->second.pgf << "\t" << fhit->second.plf << "\t" << fhit->second.function;
 	}
 	response_stream_ << "\n";
     }

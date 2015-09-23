@@ -13,6 +13,7 @@ class KmerPegMapping
 {
 public:
     KmerPegMapping(const std::string &data_dir);
+    ~KmerPegMapping();
 
     void load_mapping_file(const std::string &mapping_file);
     void load_compact_mapping_file(const std::string &mapping_file);
@@ -31,7 +32,14 @@ public:
     std::unordered_map<encoded_id_t, id_set> kmer_to_id_;
 
     /* peg to peg-attributes mapping. */
-    std::unordered_map<encoded_id_t, std::pair<std::string, std::string>> family_mapping_;
+    struct family_data {
+	std::string pgf;
+	std::string plf;
+	std::string function;
+	family_data(const std::string a, const std::string b, const std::string c)
+	: pgf(a), plf(b), function(c) {};
+    };
+    std::unordered_map<encoded_id_t, family_data> family_mapping_;
     void load_families(const std::string &families_file);
 
     encoded_id_t encode_id(const std::string peg);

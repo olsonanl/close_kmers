@@ -33,6 +33,21 @@ struct less_second : std::binary_function<T,T,bool>
 
 int main(int argc, char **argv)
 {
+    int n = 3;
+    std::vector<double> vec(5, 1.0 / n);
+
+    for (auto it = vec.begin(); it != vec.end(); it++)
+    {
+	std::cout << *it <<"\n";
+	*it /= 2;
+    }
+    for (auto it: vec)
+    {
+	std::cout << it <<"\n";
+	it /= 2;
+    }
+    
+    
     const boost::regex url_regex("^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\\?([^#]*))?(#(.*))?");
     const boost::regex path_regex("^([^?#]*)(\\?([^#]*))?(#(.*))?");
     const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(\\d+\\.\\d+)");
