@@ -392,8 +392,14 @@ void Adaboost::compute(int n_rounds)
 	    if (error < error_min)
 	    {
 		error_min = error;
-		alpha = fabs((0.5 * log((1 - error) / error)));
-		// std::cout << "computed alpha " << alpha << " from " << error << "\n";
+
+		//
+		// http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.33.4002
+		// Adjust error by an epsilon to remove failure on perfect matches.
+		//
+		
+		alpha = fabs((0.5 * log((1 - error + 1e-10) / (error + 1e-10))));
+		std::cout << "computed alpha " << alpha << " from " << error << "\n";
 		bestk = kent.first;
 	    }
 	}
