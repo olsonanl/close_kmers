@@ -18,6 +18,7 @@
 #include "kmer.h"
 #include "kserver.h"
 #include "klookup.h"
+#include "threadpool.h"
 
 using namespace boost::filesystem;
 namespace po = boost::program_options;
@@ -35,9 +36,11 @@ int main(int argc, char* argv[])
     std::string kmer_data;
     std::string peg_kmer_data;
     std::string families_file;
+    int n_kmer_threads;
 
     desc.add_options()
 	("help,h", "show this help message")
+	("n-kmer-threads", po::value<int>(&n_kmer_threads)->default_value(1), "number of kmer processing threads")
 	("listen-port-file", po::value<std::string>(&listen_port_file)->default_value("/dev/null"), "save the listen port to this file")
 	("peg-kmer-data", po::value<std::string>(&peg_kmer_data), "precomputed PEG/kmer data file")
 	("listen-port,l", po::value<std::string>(&listen_port)->required(), "port to listen on. 0 means to choose a random port")
@@ -45,6 +48,9 @@ int main(int argc, char* argv[])
 	("kmer-guts-port,p", po::value<std::string>(&kport)->required(), "port for kmer-guts server to connect to")
 	("kmer-data-dir,d", po::value<std::string>(&kmer_data)->required(), "kmer data directory")
 	("families-file", po::value<std::string>(&families_file), "families file")
+	("reserve-mapping", po::value<int>(), "Reserve this much space in global mapping table")
+	("no-populate-mmap", po::bool_switch(), "Don't populate mmap data at startup")
+	("debug-http", po::bool_switch(), "Debug HTTP protocol")
 	;
     po::positional_options_description pd;
     pd.add("listen-port", 1)
@@ -53,6 +59,7 @@ int main(int argc, char* argv[])
 	.add("kmer-data-dir", 1);
 
     po::variables_map vm;
+    g_parameters = &vm;
     po::store(po::command_line_parser(argc, argv).
 	      options(desc).positional(pd).run(), vm);
 
@@ -71,7 +78,8 @@ int main(int argc, char* argv[])
 	exit(1);
     }
 
-    KmerPegMapping mapping(kmer_data);
+    KmerPegMapping mapping;
+    mapping.load_genome_map(kmer_data + "/genomes");
 
     if (vm.count("families-file"))
     {
@@ -108,7 +116,14 @@ int main(int argc, char* argv[])
 
     std::shared_ptr<KmerGuts> kguts = std::make_shared<KmerGuts>(kmer_data);
     
-    KmerRequestServer kserver(io_service, listen_port, listen_port_file, mapping, endpoint, kguts);
+    std::shared_ptr<ThreadPool> tp = std::make_shared<ThreadPool>(kmer_data);
+
+    std::shared_ptr<KmerRequestServer> kserver = std::make_shared<KmerRequestServer>(io_service, listen_port, listen_port_file,
+										     mapping, endpoint, kguts, tp);
+
+    tp->start(n_kmer_threads);
+
+    kserver->startup();
 
 //	  std::ifstream ifile(argv[3]);
 	  

@@ -442,6 +442,17 @@ void KmerRequest::process_request()
 					boost::bind(&KmerRequest::request_complete, this),
 					parameters_);
     }
+    else if (path_ == "/matrix2")
+    {
+	krequest_ = new std::istream(&request_);
+
+	klookup2_ = new KmerLookupClient2(kguts_, *krequest_,
+					  boost::bind(&KmerRequest::on_matrix_protein, this, _1, _2),
+					  boost::bind(&KmerRequest::on_matrix_hit, this, _1),
+					  0,
+					  boost::bind(&KmerRequest::matrix_complete, this, _1),
+					  parameters_);
+    }
     else if (path_ == "/add")
     {
 	response_stream_ << "HTTP/1.1 200 OK\n";

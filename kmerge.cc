@@ -69,19 +69,21 @@ namespace std {
     };
 };
 
+template <class KmerType, class ItemType>
 class KmerSet
 {
 public:
-    typedef Kmer kmer_t;
+    // typedef Kmer kmer_t;
     // typedef std::string kmer_t;
+    typedef KmerType kmer_t;
     
-    typedef std::unordered_map<kmer_t, std::vector<bool> > map_t;
+    typedef std::unordered_map<kmer_t, std::vector<ItemType> > map_t;
 
     map_t kmer_map_;
     std::map<std::string, int> file_to_column_;
-    std::vector<bool> default_value_;
+    std::vector<ItemType> default_value_;
 
-    std::map<std::vector<bool>, std::vector<kmer_t>> pattern_seen_;
+    std::map<std::vector<ItemType>, std::vector<kmer_t> > pattern_seen_;
 
     KmerSet();
     
@@ -90,23 +92,24 @@ public:
     void process_files(const std::vector<std::string> &files, bool invert);
     void process_file(const std::string &file, int idx, bool invert);
     void process_kmc_file(const std::string &file, int idx, bool invert);
-    void add_kmer(int idx, const kmer_t &kmer, bool bval);
+    void add_kmer(int idx, const kmer_t &kmer, ItemType bval);
 
     void remove_duplicate_values();
 
     void dump(std::ostream &stream);
 };
 
+template <class KmerType>    
 class Adaboost
 {
 public:
-    Adaboost(KmerSet &kmers);
+    Adaboost(KmerSet<KmerType, bool> &kmers);
 
     void compute(int n_rounds);
     double compute_error(std::vector<bool> &kvec, std::vector<double> &pvec);
     std::vector<double> update_prob_table(double alpha, std::vector<double> &old_prob, std::vector<bool> &kvec);
 
-    KmerSet &kmers_;
+    KmerSet<KmerType, bool> &kmers_;
 };
 
 int main(int argc, char **argv)
@@ -119,10 +122,12 @@ int main(int argc, char **argv)
     std::string res_file;
     int rounds;
     int max_files;
+    bool use_kmer_counts;
     x << "Usage: " << argv[0] << " [options] resistant-file susceptible-file\nAllowed options";
     po::options_description desc(x.str());
     desc.add_options()
 	("help,h", "show this help message")
+	("use-kmer-counts", po::bool_switch(&use_kmer_counts)->default_value(false), "Use kmer counts in the matrix instead of booleans. Disables the inversions used in boolean tables.")
 	("rounds,r", po::value<int>(&rounds)->default_value(10), "Number of rounds of Adaboost to run")
 	("max-files", po::value<int>(&max_files)->default_value(-1), "Max number of files to process per data set")
 	
@@ -156,8 +161,6 @@ int main(int argc, char **argv)
 	exit(1);
     }
 
-    KmerSet kset;
-
     std::ifstream sus(sus_file);
     std::ifstream res(res_file);
 
@@ -185,37 +188,69 @@ int main(int argc, char **argv)
 	else
 	    res_files.push_back(kmer_dir + "/" + line);
     }
-
-    kset.add_files(res_files, 0);
-    kset.add_files(sus_files, 1);
-
-    kset.process_files(res_files, 0);
-    kset.process_files(sus_files, 1);
-
-    /*
-    
-    if (vm.count("output-file"))
+    if (use_kmer_counts)
     {
-	std::ofstream out(output_file);
-	kset.dump(out);
+	KmerSet<std::string, unsigned int> kset;
+
+	kset.add_files(res_files, 0);
+	kset.add_files(sus_files, 0);
+
+	kset.process_files(res_files, 0);
+	kset.process_files(sus_files, 0);
+
+	std::ostream *out;
+
+	if (vm.count("output-file"))
+	{
+	    out = new ofstream(output_file);
+	}
+	else
+	{
+	    out = &std::cout;
+	}
+
+	*out << "labels";
+	for (auto x: res_files)
+	{
+	    *out << "\t1";
+	}
+	for (auto x: sus_files)
+	{
+	    *out << "\t0";
+	}
+	*out << "\n";
+	
+	kset.dump(*out);
+	if (vm.count("output-file"))
+	{
+	    delete out;
+	}
     }
     else
     {
-	kset.dump(std::cout);
-    }
+	KmerSet<Kmer, bool> kset;
 
-    */
-    kset.remove_duplicate_values();
-    Adaboost ada(kset);
-    ada.compute(rounds);
+
+	kset.add_files(res_files, 0);
+	kset.add_files(sus_files, 1);
+
+	kset.process_files(res_files, 0);
+	kset.process_files(sus_files, 1);
+
+	kset.remove_duplicate_values();
+	Adaboost<Kmer> ada(kset);
+	ada.compute(rounds);
+    }
 }
     
-KmerSet::KmerSet()
+template <class KmerType, class ItemType>
+KmerSet<KmerType, ItemType>::KmerSet()
 {
     kmer_map_.reserve(10000000);
 }
 
-void KmerSet::add_files(const std::vector<std::string> &files, bool invert)
+template <class KmerType, class ItemType>
+void KmerSet<KmerType, ItemType>::add_files(const std::vector<std::string> &files, bool invert)
 {
     for (auto file: files)
     {
@@ -229,10 +264,10 @@ void KmerSet::add_files(const std::vector<std::string> &files, bool invert)
 	file_to_column_[file] = idx;
 	default_value_.push_back(invert);
     }
-
 }
 
-void KmerSet::process_files(const std::vector<std::string> &files, bool invert)
+template <class KmerType, class ItemType>
+void KmerSet<KmerType, ItemType>::process_files(const std::vector<std::string> &files, bool invert)
 {
     std::cerr << "Processing " << files.size() << " files\n";
     for (auto file: files)
@@ -256,7 +291,8 @@ void KmerSet::process_files(const std::vector<std::string> &files, bool invert)
     }
 }
 
-void KmerSet::process_kmc_file(const std::string &file_base, int idx, bool invert)
+template <class KmerType, class ItemType>
+void KmerSet<KmerType, ItemType>::process_kmc_file(const std::string &file_base, int idx, bool invert)
 {
     CKMCFile kmc_file;
 
@@ -285,7 +321,24 @@ void KmerSet::process_kmc_file(const std::string &file_base, int idx, bool inver
     }
 }
 
-void KmerSet::process_file(const std::string &file, int idx, bool invert)
+template <class ItemType>
+inline void parse_value(const std::string &raw, bool invert, ItemType &val)
+{
+    val = std::stoi(raw);
+}
+
+inline bool parse_value(const std::string &raw, bool invert, bool &bval)
+{
+    int val = std::stoi(raw);
+
+    bval = val ? 1 : 0;
+    if (invert)
+	bval = !bval;
+}
+
+
+template <class KmerType, class ItemType>
+void KmerSet<KmerType, ItemType>::process_file(const std::string &file, int idx, bool invert)
 {
     std::ifstream str(file);
     
@@ -302,14 +355,10 @@ void KmerSet::process_file(const std::string &file, int idx, bool invert)
 	    exit(1);
 	}
 	kmer_t kmer(line.substr(0, pos));
-	int val = std::stoi(line.substr(pos + 1));
+	ItemType val;
+	parse_value(line.substr(pos + 1), invert, val);
 
-	bool bval = val ? 1 : 0;
-	if (invert)
-	    bval = !bval;
-	// std::cerr << kmer << "\t" << val << "\t" << bval << "\n";
-
-	add_kmer(idx, kmer, bval);
+	add_kmer(idx, kmer, val);
 	#if 0
 	if (line_num > 100)
 	    break;
@@ -317,7 +366,9 @@ void KmerSet::process_file(const std::string &file, int idx, bool invert)
     }
 }
 
-void KmerSet::add_kmer(int idx, const kmer_t &kmer, bool bval)
+
+template <class KmerType, class ItemType>
+void KmerSet<KmerType, ItemType>::add_kmer(int idx, const KmerType &kmer, ItemType bval)
 {
     auto it = kmer_map_.find(kmer);
     if (it == kmer_map_.end())
@@ -331,7 +382,8 @@ void KmerSet::add_kmer(int idx, const kmer_t &kmer, bool bval)
     }
 }
 
-void KmerSet::remove_duplicate_values()
+template <class KmerType, class ItemType>
+void KmerSet<KmerType, ItemType>::remove_duplicate_values()
 {
     std::cerr << "Removing duplicate matrix patterns. Original matrix size " << kmer_map_.size() << "\n";
     int ndups = 0;
@@ -356,7 +408,8 @@ void KmerSet::remove_duplicate_values()
     std::cerr << "Complete. Final matrix size " << kmer_map_.size() << " after removing " << ndups << " duplicatess\n";
 }
 
-void KmerSet::dump(std::ostream &stream)
+template <class KmerType, class ItemType>
+void KmerSet<KmerType, ItemType>::dump(std::ostream &stream)
 {
     for (auto ent: kmer_map_)
     {
@@ -369,11 +422,13 @@ void KmerSet::dump(std::ostream &stream)
     }
 }
 
-Adaboost::Adaboost(KmerSet &kmers) : kmers_(kmers)
+template <class KmerType>
+Adaboost<KmerType>::Adaboost(KmerSet<KmerType,bool> &kmers) : kmers_(kmers)
 {
 }
 
-void Adaboost::compute(int n_rounds)
+template <class KmerType>
+void Adaboost<KmerType>::compute(int n_rounds)
 {
     int n = kmers_.default_value_.size();
 
@@ -381,7 +436,7 @@ void Adaboost::compute(int n_rounds)
 
     for (int round = 0; round < n_rounds; round++)
     {
-	KmerSet::kmer_t bestk;
+	KmerType bestk;
 	double alpha;
 	double error_min = 1.0;
 
@@ -399,7 +454,7 @@ void Adaboost::compute(int n_rounds)
 		//
 		
 		alpha = fabs((0.5 * log((1 - error + 1e-10) / (error + 1e-10))));
-		std::cout << "computed alpha " << alpha << " from " << error << "\n";
+		// std::cout << "computed alpha " << alpha << " from " << error << "\n";
 		bestk = kent.first;
 	    }
 	}
@@ -428,7 +483,8 @@ void Adaboost::compute(int n_rounds)
     }
 }
 
-std::vector<double> Adaboost::update_prob_table(double alpha,
+template <class KmerType>
+std::vector<double> Adaboost<KmerType>::update_prob_table(double alpha,
 						std::vector<double> &old_prob,
 						std::vector<bool> &kvec)
 {
@@ -465,7 +521,8 @@ std::vector<double> Adaboost::update_prob_table(double alpha,
     return new_prob;
 }
 
-double Adaboost::compute_error(std::vector<bool> &kvec, std::vector<double> &pvec)
+template <class KmerType>
+double Adaboost<KmerType>::compute_error(std::vector<bool> &kvec, std::vector<double> &pvec)
 {
     double error = 0.0;
     

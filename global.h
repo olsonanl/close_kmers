@@ -3,9 +3,16 @@
 
 #include <boost/timer/timer.hpp>
 
-#ifndef DEFINE_GLOBALS
-extern
+#ifdef DEFINE_GLOBALS
+#define G_EXTERN
+#else
+#define G_EXTERN extern
 #endif
-boost::timer::cpu_timer g_timer;
 
-#endif
+namespace boost { namespace program_options { class variables_map; } }
+
+G_EXTERN boost::timer::cpu_timer g_timer;
+G_EXTERN boost::program_options::variables_map *g_parameters;
+
+
+#endif /* _GLOBAL_H */

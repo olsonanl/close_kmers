@@ -1,5 +1,7 @@
 #include "kguts.h"
 
+#include <iostream>
+#include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -15,6 +17,9 @@
 #include <errno.h>
 #include <string.h>
 
+#include <boost/program_options.hpp>
+#include "global.h"
+
 static const  char genetic_code[64] = {
     'K','N','K','N','T','T','T','T','R','S','R','S','I','I','M','I',
     'Q','H','Q','H','P','P','P','P','R','R','R','R','L','L','L','L',
@@ -26,8 +31,26 @@ static const  char prot_alpha[20] = {
     'A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y' 
 };
 
-KmerGuts::KmerGuts(const std::string &data_dir)
+KmerGuts::KmerGuts(const std::string &data_dir, kmer_memory_image_t *image) : KmerGuts()
 {
+    if (image == 0)
+    {
+	image = map_image_file(data_dir);
+    }
+    kmersH = init_kmers(data_dir.c_str(), image);
+}
+
+KmerGuts::KmerGuts() :
+    param_map_(
+	{
+	    { "order_constraint", order_constraint },
+	    { "min_hits", min_hits },
+	    { "min_weighted_hits", min_weighted_hits },
+	    { "max_gap", max_gap }
+	})
+{
+    kmersH = 0;
+    
     tot_lookups = 0;
     retry  = 0;
 
@@ -40,17 +63,47 @@ KmerGuts::KmerGuts(const std::string &data_dir)
     num_hits = 0;
     num_oI = 0;
 
-    order_constraint = 0;
-    min_hits = 5;
-    min_weighted_hits = 0;
-    max_gap  = 200;
+    set_default_parameters();
 
     pIseq = (unsigned char *) malloc(MAX_SEQ_LEN / 3);
     cdata = (char *) malloc(MAX_SEQ_LEN);
     data = (char *) malloc(MAX_SEQ_LEN);
     pseq = (char *) malloc(MAX_SEQ_LEN / 3);
 
-    kmersH = init_kmers(data_dir.c_str());
+}
+
+void KmerGuts::set_default_parameters()
+{
+    order_constraint = 0;
+    min_hits = 5;
+    min_weighted_hits = 0;
+    max_gap  = 200;
+}
+
+void KmerGuts::set_parameters(const std::map<std::string, std::string> &params)
+{
+    set_default_parameters();
+    for (auto p: params)
+    {
+	auto myp = param_map_.find(p.first);
+	if (myp != param_map_.end())
+	{
+	    try {
+		int val = std::stoi(p.second);
+		myp->second = val;
+	    } catch (const std::invalid_argument& ia)
+	    {
+		std::cerr << "Warning: invalid integer '" << p.second << "' passed for parameter " << p.first << "\n";
+	    }
+	}
+    }
+    /*
+    std::cerr << "Parameters:\n";
+    for (auto p: param_map_)
+    {
+	std::cerr << p.first << "=" << p.second << "\n";
+    }
+    */
 }
 
 
@@ -349,6 +402,7 @@ char **KmerGuts::load_indexed_ar(char *filename,int *sz) {
 
     *sz += 1;
   }
+  fclose(ifp);
   return index_ar;
 }
 
@@ -441,55 +495,70 @@ KmerGuts::kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long
   return image;
 }
 
-KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
+KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD, kmer_memory_image_t *image) {
     kmer_handle_t *handle = (kmer_handle_t *) malloc(sizeof(kmer_handle_t));
 
-  kmer_memory_image_t *image;
-
-  char file[300];
-  strcpy(file,dataD);
-  strcat(file,"/function.index");
-  handle->function_array = load_functions(file);
-
-  strcpy(file,dataD);
-  strcat(file,"/otu.index");
-  handle->otu_array      = load_otus(file);
-
-  char fileM[300];
-  strcpy(fileM,dataD);
-  strcat(fileM,"/kmer.table.mem_map");
-
-  if (write_mem_map) {
-    unsigned long long sz, table_size;
+    char file[300];
     strcpy(file,dataD);
-    strcat(file,"/final.kmers");
-    
-    unsigned long long image_size;
+    strcat(file,"/function.index");
+    handle->function_array = load_functions(file);
 
-    image = load_raw_kmers(file, size_hash, &image_size);
+    strcpy(file,dataD);
+    strcat(file,"/otu.index");
+    handle->otu_array      = load_otus(file);
 
-    handle->kmer_table = (sig_kmer_t *) (image + 1);
-    handle->num_sigs   = image->num_sigs;
-
-    FILE *fp = fopen(fileM,"w");
-    if (fp == NULL) { 
-      fprintf(stderr,"could not open %s for writing: %s ",fileM, strerror(errno));
-      exit(1);
-    }
-    fwrite(image, image_size, 1, fp);
-    fclose(fp);
-
+    char fileM[300];
     strcpy(fileM,dataD);
-    strcat(fileM,"/size_hash.and.table_size");
-    fp = fopen(fileM,"w");
-    fprintf(fp,"%lld\t%lld\n",sz,table_size);
-    fclose(fp);
-  }
-  else {
+    strcat(fileM,"/kmer.table.mem_map");
+
+    if (write_mem_map) {
+	unsigned long long sz, table_size;
+	strcpy(file,dataD);
+	strcat(file,"/final.kmers");
+    
+	unsigned long long image_size;
+
+	image = load_raw_kmers(file, size_hash, &image_size);
+
+	handle->kmer_table = (sig_kmer_t *) (image + 1);
+	handle->num_sigs   = image->num_sigs;
+
+	FILE *fp = fopen(fileM,"w");
+	if (fp == NULL) { 
+	    fprintf(stderr,"could not open %s for writing: %s ",fileM, strerror(errno));
+	    exit(1);
+	}
+	fwrite(image, image_size, 1, fp);
+	fclose(fp);
+
+	strcpy(fileM,dataD);
+	strcat(fileM,"/size_hash.and.table_size");
+	fp = fopen(fileM,"w");
+	fprintf(fp,"%lld\t%lld\n",sz,table_size);
+	fclose(fp);
+    }
+    else {
+
+	if (image == 0)
+	{
+	    image = map_image_file(dataD);
+	}
+
+	size_hash = image->num_sigs;
+	handle->num_sigs = size_hash;
+	handle->kmer_table = (sig_kmer_t *) (image + 1);
+    }
+    return handle;
+}
+
+KmerGuts::kmer_memory_image_t *KmerGuts::map_image_file(const std::string &data_dir)
+{
+    std::string fileM = data_dir + "/kmer.table.mem_map";
     int fd;
-    if ((fd = open(fileM, O_RDONLY)) == -1) {
-      perror("open");
-      exit(1);
+    std::cout << "mmap " << fileM << "\n";
+    if ((fd = open(fileM.c_str(), O_RDONLY)) < 0) {
+	perror("open");
+	exit(1);
     }
 
     /*
@@ -497,58 +566,59 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
      * on disk with a stat() call.
      */
     struct stat sbuf;
-    if (stat(fileM, &sbuf) == -1) {
-      fprintf(stderr, "stat %s failed: %s\n", fileM, strerror(errno));
-      exit(1);
+    if (stat(fileM.c_str(), &sbuf) == -1) {
+	fprintf(stderr, "stat %s failed: %s\n", fileM.c_str(), strerror(errno));
+	exit(1);
     }
     unsigned long long file_size = sbuf.st_size;
-
+    
     /* 
      * Memory map.
      */
     int flags = MAP_SHARED;
-
-    #ifdef MAP_POPULATE
-    // flags |= MAP_POPULATE;
-    #endif
-
-    image = (kmer_memory_image_t *) mmap((caddr_t)0, file_size, PROT_READ, flags, fd, 0);
-
-    if (image == (kmer_memory_image_t *)(-1)) {
-      fprintf(stderr, "mmap of kmer_table %s failed: %s\n", fileM, strerror(errno));
-      exit(1);
+    
+#ifdef MAP_POPULATE
+    bool do_populate = false;
+    if (g_parameters->count("reserve-mapping"))
+    {
+	do_populate = ! ( (*g_parameters)["no-populate-mmap"].as<bool>() );
     }
 
+    if (do_populate)
+	flags |= MAP_POPULATE;
+#endif
+    
+    kmer_memory_image_t *image = (kmer_memory_image_t *) mmap((caddr_t)0, file_size, PROT_READ, flags, fd, 0);
+
+    if (image == (kmer_memory_image_t *)(-1)) {
+	fprintf(stderr, "mmap of kmer_table %s failed: %s\n", fileM.c_str(), strerror(errno));
+	exit(1);
+    }
+
+    /* Validate overall file size vs the entry size and number of entries */
+    if (file_size != ((sizeof(sig_kmer_t) * image->num_sigs) + sizeof(kmer_memory_image_t))) {
+	fprintf(stderr, "Version mismatch for file %s: file size does not match\n", fileM.c_str());
+	exit(1);
+    }
+    
     /* 
      * Our image is mapped. Validate against the current version of this code.
      */
     if (image->version != (long long) VERSION) {
-      fprintf(stderr, "Version mismatch for file %s: file has %lld code has %lld\n", 
-	      fileM, image->version, (long long) VERSION);
-      exit(1);
+	fprintf(stderr, "Version mismatch for file %s: file has %lld code has %lld\n", 
+		fileM.c_str(), image->version, (long long) VERSION);
+	exit(1);
     }
-
+    
     if (image->entry_size != (unsigned long long) sizeof(sig_kmer_t)) {
-      fprintf(stderr, "Version mismatch for file %s: file has entry size %lld code has %lld\n",
-	      fileM, image->entry_size, (unsigned long long) sizeof(sig_kmer_t));
-      exit(1);
+	fprintf(stderr, "Version mismatch for file %s: file has entry size %lld code has %lld\n",
+		fileM.c_str(), image->entry_size, (unsigned long long) sizeof(sig_kmer_t));
+	exit(1);
     }
-
-    size_hash = image->num_sigs;
-    handle->num_sigs = size_hash;
-    handle->kmer_table = (sig_kmer_t *) (image + 1);
-
-    /* Validate overall file size vs the entry size and number of entries */
-    if (file_size != ((sizeof(sig_kmer_t) * image->num_sigs) + sizeof(kmer_memory_image_t))) {
-      fprintf(stderr, "Version mismatch for file %s: file size does not match\n", fileM);
-      exit(1);
-    }
-
-    fprintf(stderr, "Set size_hash=%lld from file size %lld\n", size_hash, file_size);
-
-  }
-  return handle;
+    fprintf(stderr, "Set size_hash=%lld from file size %lld\n", image->num_sigs, file_size);
+    return image;
 }
+
 
 void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
 
@@ -668,6 +738,7 @@ void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq
     }
     while (p < bound) {
 	long long  where = lookup_hash_entry(kmersH->kmer_table,encodedK);
+	// std::cerr << p << " " << encodedK << " " << where << "\n";
 	if (where >= 0) {
 	    sig_kmer_t *kmers_hash_entry = &(kmersH->kmer_table[where]);
 	    int avg_off_end = kmers_hash_entry->avg_from_end;
@@ -735,6 +806,15 @@ void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq
     num_hits = 0;
 }
 
+void KmerGuts::process_aa_seq_hits(const char *id,const char *pseq,size_t ln,
+			      std::shared_ptr<std::vector<KmerCall>> calls,
+			      std::shared_ptr<std::vector<sig_kmer_t>> hits,
+			      std::shared_ptr<KmerOtuStats> otu_stats)
+{
+    auto cb = [this, hits](sig_kmer_t &k) { hits->push_back(k); };
+    process_aa_seq(id, pseq, ln, calls, cb, otu_stats);
+}
+
 void KmerGuts::process_aa_seq(const char *id,const char *pseq,size_t ln,
 			      std::shared_ptr<std::vector<KmerCall>> calls,
 			      std::function<void(sig_kmer_t &)> hit_cb,
@@ -780,5 +860,29 @@ void KmerGuts::process_seq(const char *id,const char *data,
     }
     if (otu_stats)
 	otu_stats->finalize();
+}
+
+std::string KmerGuts::format_call(const KmerCall &c)
+{
+    std::ostringstream oss;
+    oss << "CALL\t" << c.start << "\t" << c.end << "\t" << c.count;
+    oss << "\t" << c.function_index << "\t" << kmersH->function_array[c.function_index];
+    oss << "\t" << c.weighted_hits << "\n";
+    
+    return oss.str();
+}
+
+std::string KmerGuts::format_otu_stats(const std::string &id, int size, KmerOtuStats &otu_stats)
+{
+    std::ostringstream oss;
+    oss << "OTU-COUNTS\t" << id << "[" << size << "]";
+
+    auto end = std::next(otu_stats.otus_by_count.begin(), std::min(otu_stats.otus_by_count.size(), (size_t) 5));
+    for (auto x = otu_stats.otus_by_count.begin(); x != end; x++)
+    {
+	oss << "\t" << x->second << "-" << x->first;
+    }
+    oss << "\n";
+    return oss.str();
 }
 

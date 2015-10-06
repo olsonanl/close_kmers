@@ -12,8 +12,12 @@
 class KmerPegMapping
 {
 public:
-    KmerPegMapping(const std::string &data_dir);
+    KmerPegMapping();
     ~KmerPegMapping();
+
+    void reserve_mapping_space(size_t n);
+
+    void load_genome_map(const std::string &genome_mapping_file);
 
     void load_mapping_file(const std::string &mapping_file);
     void load_compact_mapping_file(const std::string &mapping_file);
@@ -21,8 +25,6 @@ public:
 
     typedef unsigned long encoded_id_t;
     typedef std::vector<encoded_id_t> id_set;
-
-    std::string data_dir_;
 
     std::map<std::string, encoded_id_t> genome_to_id_;
     std::map<encoded_id_t, std::string> id_to_genome_;
@@ -42,7 +44,7 @@ public:
     std::unordered_map<encoded_id_t, family_data> family_mapping_;
     void load_families(const std::string &families_file);
 
-    encoded_id_t encode_id(const std::string peg);
+    encoded_id_t encode_id(const std::string &peg);
     encoded_id_t encode_id(const std::string &genome, const std::string &peg);
 
     void add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long kmer);

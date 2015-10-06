@@ -24,7 +24,6 @@ KmerLookupClient3::KmerLookupClient3(boost::asio::io_service& io_service,
 				     std::map<std::string, std::string> &parameters)
     : resolver_(io_service),
       socket_(io_service),
-      parameters_(parameters),
       on_protein_(on_protein),
       on_hit_(on_hit),
       on_call_(on_call),

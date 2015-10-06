@@ -33,12 +33,21 @@ std::vector<std::string> split(const std::string &s, char delim) {
     return elems;
 }
 
-KmerPegMapping::KmerPegMapping(const std::string &data_dir) :
-    data_dir_(data_dir),
+KmerPegMapping::KmerPegMapping() :
     next_genome_id_(0),
     kcount_(0)
 {
-    std::string genome_file = data_dir_ + "/genomes";
+    std::cout << "Constructed KmerPegMapping\n";
+}
+
+void KmerPegMapping::reserve_mapping_space(size_t n)
+{
+    kmer_to_id_.reserve(n);
+}
+					 
+
+void KmerPegMapping::load_genome_map(const std::string &genome_file)
+{
     std::ifstream gfile(genome_file);
     if (gfile.fail())
     {
@@ -58,9 +67,6 @@ KmerPegMapping::KmerPegMapping(const std::string &data_dir) :
 
     gfile.close();
 
-    kmer_to_id_.reserve(4000000000);
-
-    std::cout << "Constructed KmerPegMapping\n";
 }
 
 KmerPegMapping::~KmerPegMapping()
@@ -159,13 +165,13 @@ void KmerPegMapping::add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long
     if (it == kmer_to_id_.end())
     {
 	auto n = kmer_to_id_.emplace(std::make_pair(kmer, id_set()));
-	// std::cout << "Alloc new for " << kmer << "\n";
+	//std::cout << "Alloc new for " << kmer << "\n";
 	n.first->second.reserve(2);
 	n.first->second.push_back(enc);
     }
     else
     {
-	// std::cout << "reuse " << kmer << "\n";
+	//std::cout << "reuse " << kmer << "\n";
 	it->second.push_back(enc);
     }
     kcount_++;
@@ -174,7 +180,7 @@ void KmerPegMapping::add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long
     
 }
 
-KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string peg)
+KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string &peg)
 {
     size_t i1 = peg.find('|');
     size_t i2 = peg.find('p', i1 + 1);

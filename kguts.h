@@ -281,6 +281,10 @@ public:
     int   min_weighted_hits;
     int   max_gap;
 
+    void set_default_parameters();
+    std::map<std::string, int &> param_map_;
+    void set_parameters(const std::map<std::string, std::string> &params);
+
     unsigned char *pIseq;
     char *data;
     char *cdata;
@@ -290,8 +294,9 @@ public:
     int retry;
 
     kmer_handle_t *kmersH;
-    
-    KmerGuts(const std::string &kmer_dir);
+
+    KmerGuts();
+    KmerGuts(const std::string &kmer_dir, kmer_memory_image_t *image = 0);
 
     unsigned char to_amino_acid_off(char c);
     char comp(char c);
@@ -327,9 +332,18 @@ public:
 			std::function<void(sig_kmer_t &)> hit_cb,
 			std::shared_ptr<KmerOtuStats> otu_stats);
 
-private:
-    kmer_handle_t *init_kmers(const char *dataD);
+    void process_aa_seq_hits(const char *id,const char *pseq,size_t ln,
+			std::shared_ptr<std::vector<KmerCall>> calls,
+			std::shared_ptr<std::vector<sig_kmer_t>> hits,
+			std::shared_ptr<KmerOtuStats> otu_stats);
 
+    kmer_handle_t *init_kmers(const char *dataD, kmer_memory_image_t *image = 0);
+    static kmer_memory_image_t *map_image_file(const std::string &data_dir);
+
+    char *function_at_index(int i) { return kmersH->function_array[i]; }
+
+    std::string format_call(const KmerCall &c);
+    std::string format_otu_stats(const std::string &id, int size, KmerOtuStats &otu_stats);
 };
 
 
