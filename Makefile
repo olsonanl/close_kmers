@@ -65,7 +65,7 @@ kmerge: kmerge.o
 kc: kc.o kmer.o kserver.o krequest.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-kser: kser.o kmer.o kserver.o klookup2.o klookup3.o kguts.o \
+kser: kser.o kmer.o kserver.o kguts.o \
 	fasta_parser.o krequest2.o add_request.o threadpool.o matrix_request.o query_request.o lookup_request.o md5.o
 	$(CXX) $(LDFLAGS) $(OPT) -o kser $^ $(LIBS)
 
@@ -82,9 +82,10 @@ depend:
 
 add_request.o: add_request.h compute_request.h krequest2.h kmer.h klookup.h
 add_request.o: kguts.h fasta_parser.h klookup2.h klookup3.h threadpool.h
+add_request.o: md5.h
 fasta_parser.o: fasta_parser.h
-kc.o: kmer.h kserver.h krequest.h klookup.h kguts.h fasta_parser.h klookup2.h
-kc.o: klookup3.h krequest2.h compute_request.h threadpool.h
+kc.o: kmer.h kserver.h krequest2.h klookup.h kguts.h fasta_parser.h
+kc.o: klookup2.h klookup3.h compute_request.h threadpool.h
 kfile.o: kguts.h fasta_parser.h
 kguts.o: kguts.h global.h
 klookup2.o: klookup2.h kmer.h kguts.h fasta_parser.h global.h
@@ -93,16 +94,15 @@ klookup.o: klookup.h kmer.h kguts.h fasta_parser.h global.h
 kmer.o: popen.h kmer.h
 kmerge.o: stringutil.h
 krequest2.o: krequest2.h kmer.h klookup.h kguts.h fasta_parser.h klookup2.h
-krequest2.o: klookup3.h compute_request.h threadpool.h kserver.h krequest.h
-krequest2.o: global.h add_request.h matrix_request.h prot_seq.h
-krequest2.o: query_request.h debug.h
+krequest2.o: klookup3.h compute_request.h threadpool.h kserver.h global.h
+krequest2.o: add_request.h matrix_request.h prot_seq.h query_request.h
+krequest2.o: lookup_request.h debug.h
 krequest.o: krequest.h kmer.h klookup.h kguts.h fasta_parser.h klookup2.h
 krequest.o: klookup3.h global.h
-kser.o: global.h kmer.h kserver.h krequest.h klookup.h kguts.h fasta_parser.h
-kser.o: klookup2.h klookup3.h krequest2.h compute_request.h threadpool.h
-kserver.o: kserver.h kmer.h krequest.h klookup.h kguts.h fasta_parser.h
-kserver.o: klookup2.h klookup3.h krequest2.h compute_request.h threadpool.h
-kserver.o: global.h
+kser.o: global.h kmer.h kserver.h krequest2.h klookup.h kguts.h
+kser.o: fasta_parser.h klookup2.h klookup3.h compute_request.h threadpool.h
+kserver.o: kserver.h kmer.h krequest2.h klookup.h kguts.h fasta_parser.h
+kserver.o: klookup2.h klookup3.h compute_request.h threadpool.h global.h
 lookup_request.o: lookup_request.h compute_request.h krequest2.h kmer.h
 lookup_request.o: klookup.h kguts.h fasta_parser.h klookup2.h klookup3.h
 lookup_request.o: threadpool.h prot_seq.h global.h
