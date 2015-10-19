@@ -28,12 +28,10 @@ const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(
 KmerRequest2::KmerRequest2(std::shared_ptr<KmerRequestServer> server,
 			   boost::asio::io_service &io_service,
 			   std::shared_ptr<std::map<std::string, std::shared_ptr<KmerPegMapping> > > mapping_map,
-			   std::shared_ptr<KmerGuts> kguts,
 			   std::shared_ptr<ThreadPool> thread_pool) : server_(server),
 								      io_service_(io_service),
 								      socket_(io_service_),
 								      mapping_map_(mapping_map),
-								      kguts_(kguts),
 								      request_(16384),
 								      thread_pool_(thread_pool)
 							      

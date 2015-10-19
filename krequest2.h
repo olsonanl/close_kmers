@@ -29,7 +29,6 @@ public:
     KmerRequest2(std::shared_ptr<KmerRequestServer> server,
 		 boost::asio::io_service &io_service,
 		 std::shared_ptr<std::map<std::string, std::shared_ptr<KmerPegMapping>>> mapping_map,
-		 std::shared_ptr<KmerGuts> kguts,
 		 std::shared_ptr<ThreadPool> thread_pool
 	);
     ~KmerRequest2();
@@ -82,8 +81,6 @@ private:
     std::string http_version_;
     std::map<std::string, std::string> parameters_;
     std::map<std::string, std::string> headers_;
-
-    std::shared_ptr<KmerGuts> kguts_;
 
     boost::asio::io_service &io_service_;
     boost::asio::ip::tcp::socket socket_;

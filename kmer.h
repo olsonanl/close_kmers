@@ -7,7 +7,7 @@
 
 #include <unordered_map>
 #include <vector>
-
+#include <array>
 
 class KmerPegMapping
 {
@@ -43,6 +43,13 @@ public:
     };
     std::unordered_map<encoded_id_t, family_data> family_mapping_;
     void load_families(const std::string &families_file);
+
+    /*
+     * We also maintain a mapping from an md5 value to the pegs with that
+     * md5.
+     */
+
+    std::map<std::array<char, 16>, std::vector<encoded_id_t> > md5_to_peg_;
 
     encoded_id_t encode_id(const std::string &peg);
     encoded_id_t encode_id(const std::string &genome, const std::string &peg);

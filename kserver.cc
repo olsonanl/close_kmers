@@ -12,8 +12,6 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 				     const std::string &port,
 				     const std::string &port_file,
 				     KmerPegMapping &mapping,
-				     boost::asio::ip::tcp::endpoint &klookup_endpoint,
-				     std::shared_ptr<KmerGuts> kguts,
 				     std::shared_ptr<ThreadPool> thread_pool
     ) :
     io_service_(io_service),
@@ -22,8 +20,6 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
     port_file_(port_file),
     signals_(io_service_),
     mapping_(mapping),
-    klookup_endpoint_(klookup_endpoint),
-    kguts_(kguts),
     thread_pool_(thread_pool)
 {
     mapping_map_ = std::make_shared<std::map<std::string, std::shared_ptr<KmerPegMapping> > >();
@@ -75,43 +71,9 @@ void KmerRequestServer::startup()
     do_accept2();
 }
 
-void KmerRequestServer::do_accept()
-{
-    KmerRequest *r = new KmerRequest(io_service_, mapping_, klookup_endpoint_, kguts_);
-    acceptor_.async_accept(r->socket(),
-			   boost::bind(&KmerRequestServer::on_accept, this,
-				       boost::asio::placeholders::error, r));
-}
-
-void KmerRequestServer::on_accept(boost::system::error_code ec, KmerRequest *r)
-{
-    g_timer.start();
-    // Check whether the server was stopped by a signal before this
-    // completion handler had a chance to run.
-    if (!acceptor_.is_open())
-    {
-	std::cout << "not open\n";
-	delete r;
-	return;
-    }
-    
-    if (!ec)
-    {
-	/*
-	 * Connection has come in.
-	 * Begin parsing the request line and headers.
-	 */
-	
-	// active_.insert(r);
-	r->do_read();
-    }
-    
-    do_accept();
-}
-
 void KmerRequestServer::do_accept2()
 {
-    std::shared_ptr<KmerRequest2> r = std::make_shared<KmerRequest2>(shared_from_this(), io_service_, mapping_map_, kguts_, thread_pool_);
+    std::shared_ptr<KmerRequest2> r = std::make_shared<KmerRequest2>(shared_from_this(), io_service_, mapping_map_, thread_pool_);
     // std::cerr << "create " << r << "\n";
     acceptor_.async_accept(r->socket(),
 			   boost::bind(&KmerRequestServer::on_accept2, this,

@@ -3,6 +3,9 @@
 #include <boost/bind.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/buffers_iterator.hpp>
+#include <array>
+#include <cctype>
+#include "md5.h"
 
 inline std::string make_string(boost::asio::streambuf& streambuf)
 {
@@ -99,25 +102,39 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 		KmerGuts *kguts = owner_->thread_pool()->kguts_.get();
 		kguts->set_parameters(owner_->parameters());
 		auto sbuf = std::make_shared<boost::asio::streambuf>();
+		// auto md5s = std::make_shared<std::map<std::string, std::array<unsigned char, 16> > >();
 		std::ostream os(sbuf.get());
 
 		// std::cout << "compute in " << pthread_self() << "\n";
 
 		for (auto x: *cur)
 		{
+		    std::string &id = x.first;
+		    std::string &seq = x.second;
+		    /*
+		    md5_state_t mstate;
+		    md5_init(&mstate);
+		    for (char c: seq)
+		    {
+			md5_byte_t u = toupper(c);
+			md5_append(&mstate, &u, 1);
+		    }
+		    std::array<unsigned char, 16> &c = (*md5s)[id];
+		    md5_finish(&mstate, c.data());
+		    */
 		    hlist_t hits = std::make_shared<std::vector<KmerGuts::sig_kmer_t> >();
 		    auto calls = std::make_shared<std::vector<KmerCall> >();
 		    auto stats = std::make_shared<KmerOtuStats>();
-		    kguts->process_aa_seq_hits(x.first.c_str(), x.second.c_str(), x.second.size(), calls, hits, stats);
-		    seq_hits->push_back(std::make_pair(x.first, hits));
+		    kguts->process_aa_seq_hits(id.c_str(), seq.c_str(), seq.size(), calls, hits, stats);
+		    seq_hits->push_back(std::make_pair(id, hits));
 		    if (!silent_)
 		    {
-			os << "PROTEIN-ID\t" << x.first << "\t" << x.second.size() << "\n";
+			os << "PROTEIN-ID\t" << id << "\t" << seq.size() << "\n";
 			for (auto c: *calls)
 			{
 			    os << kguts->format_call(c);
 			}
-			os << kguts->format_otu_stats(x.first, x.second.size(), *stats);
+			os << kguts->format_otu_stats(id, seq.size(), *stats);
 		    }
 		}
 		owner_->io_service().post([this, sbuf, seq_hits, err](){

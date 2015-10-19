@@ -26,13 +26,11 @@ namespace po = boost::program_options;
 int main(int argc, char* argv[])
 {
     std::ostringstream x;
-    x << "Usage: " << argv[0] << " [options] listen-port kmer-guts-host kmer-guts-port kmer-data-dir\nAllowed options";
+    x << "Usage: " << argv[0] << " [options] listen-port kmer-data-dir\nAllowed options";
     po::options_description desc(x.str());
 
     std::string listen_port;
     std::string listen_port_file;
-    std::string khost;
-    std::string kport;
     std::string kmer_data;
     std::string peg_kmer_data;
     std::string families_file;
@@ -44,8 +42,6 @@ int main(int argc, char* argv[])
 	("listen-port-file", po::value<std::string>(&listen_port_file)->default_value("/dev/null"), "save the listen port to this file")
 	("peg-kmer-data", po::value<std::string>(&peg_kmer_data), "precomputed PEG/kmer data file")
 	("listen-port,l", po::value<std::string>(&listen_port)->required(), "port to listen on. 0 means to choose a random port")
-	("kmer-guts-host", po::value<std::string>(&khost)->required(), "hostname for kmer-guts server to connect to")
-	("kmer-guts-port,p", po::value<std::string>(&kport)->required(), "port for kmer-guts server to connect to")
 	("kmer-data-dir,d", po::value<std::string>(&kmer_data)->required(), "kmer data directory")
 	("families-file", po::value<std::string>(&families_file), "families file")
 	("reserve-mapping", po::value<int>(), "Reserve this much space in global mapping table")
@@ -54,8 +50,6 @@ int main(int argc, char* argv[])
 	;
     po::positional_options_description pd;
     pd.add("listen-port", 1)
-	.add("kmer-guts-host", 1)
-	.add("kmer-guts-port", 1)
 	.add("kmer-data-dir", 1);
 
     po::variables_map vm;
@@ -109,17 +103,10 @@ int main(int argc, char* argv[])
     
     boost::asio::io_service io_service;
 
-    tcp::resolver resolver(io_service);
-
-    auto iter = resolver.resolve({khost, kport});
-    boost::asio::ip::tcp::endpoint endpoint = *iter;
-
-    std::shared_ptr<KmerGuts> kguts = std::make_shared<KmerGuts>(kmer_data);
-    
     std::shared_ptr<ThreadPool> tp = std::make_shared<ThreadPool>(kmer_data);
 
     std::shared_ptr<KmerRequestServer> kserver = std::make_shared<KmerRequestServer>(io_service, listen_port, listen_port_file,
-										     mapping, endpoint, kguts, tp);
+										     mapping, tp);
 
     tp->start(n_kmer_threads);
 
