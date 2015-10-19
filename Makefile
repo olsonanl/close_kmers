@@ -18,7 +18,7 @@ endif
 default: kser
 
 # OPT = -O3
-#OPT = -O2 -pg
+OPT = -O2 -pg
 OPT = -g -O3
 # OPT = -g
 # OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
@@ -35,6 +35,7 @@ KMC_LIB = $(KMC_DIR)/*.o
 KMC_INC = -I$(KMC_DIR)
 
 CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC)
+CFLAGS = $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC)
 
 LDFLAGS  = -static
 
@@ -65,8 +66,8 @@ kc: kc.o kmer.o kserver.o krequest.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 kser: kser.o kmer.o kserver.o krequest.o klookup.o klookup2.o klookup3.o kguts.o \
-	fasta_parser.o krequest2.o add_request.o threadpool.o matrix_request.o query_request.o lookup_request.o
-	$(CXX) $(LDFLAGS) $(OPT) -o kser2 $^ $(LIBS)
+	fasta_parser.o krequest2.o add_request.o threadpool.o matrix_request.o query_request.o lookup_request.o md5.o
+	$(CXX) $(LDFLAGS) $(OPT) -o kser $^ $(LIBS)
 
 kfile: kfile.o kguts.o fasta_parser.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
