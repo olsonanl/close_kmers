@@ -240,6 +240,13 @@ void KmerPegMapping::load_families(const std::string &families_file)
     std::string line;
     std::string zeros("00000000");
 
+    if (f.fail())
+    {
+	std::cerr << "Failure opening families file " << families_file << "\n";
+	exit(1);
+    }
+
+
     /*
      * Read a sample of lines to estimate number of lines in file.
      */
@@ -255,9 +262,11 @@ void KmerPegMapping::load_families(const std::string &families_file)
     size_t fsize = f.tellg();
     f.seekg(0, f.beg);
 
-    size_t size_estimate = fsize * sample_size / lines;
-    family_mapping_.reserve(size_estimate * 10);
+    // fsize / (sample_size / lines )
+       
+    size_t size_estimate = fsize * lines / sample_size;
     std::cerr << "fsize=" << fsize << " line estimate=" << size_estimate << "\n";
+    family_mapping_.reserve(size_estimate * 10);
     
     while (std::getline(f, line))
     {
