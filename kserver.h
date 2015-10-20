@@ -23,7 +23,6 @@ public:
     KmerRequestServer(boost::asio::io_service& io_service,
 		      const std::string &port,
 		      const std::string &port_file,
-		      KmerPegMapping &mapping,
 		      std::shared_ptr<ThreadPool> thread_pool);
 
     void startup();
@@ -42,7 +41,6 @@ private:
     std::string port_;
     std::string port_file_;
     std::set<std::shared_ptr<KmerRequest2> > active_;
-    KmerPegMapping &mapping_;
 
     std::shared_ptr<std::map<std::string, std::shared_ptr<KmerPegMapping>>> mapping_map_;
 };

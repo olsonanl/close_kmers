@@ -72,16 +72,11 @@ int main(int argc, char* argv[])
 	exit(1);
     }
 
-    KmerPegMapping mapping;
-    mapping.load_genome_map(kmer_data + "/genomes");
-
-    if (vm.count("families-file"))
-    {
-	std::string ff = vm["families-file"].as<std::string>();
-	std::cerr << "Loading families from " << ff << "\n";
-	mapping.load_families(ff);
-    }
-
+    /*
+     * We never really used this. If we want to again we will need to
+     * move this code to the global mapping initialization in kserver.cc.
+     */
+    /*
     if (vm.count("peg-kmer-data"))
     {
 	path data_dir(vm["peg-kmer-data"].as<std::string>());
@@ -100,21 +95,18 @@ int main(int argc, char* argv[])
 	    mapping.load_compact_mapping_file(data_dir.string());
 	}
     }
+    */
     
     boost::asio::io_service io_service;
 
     std::shared_ptr<ThreadPool> tp = std::make_shared<ThreadPool>(kmer_data);
 
     std::shared_ptr<KmerRequestServer> kserver = std::make_shared<KmerRequestServer>(io_service, listen_port, listen_port_file,
-										     mapping, tp);
+										     tp);
 
     tp->start(n_kmer_threads);
 
     kserver->startup();
-
-//	  std::ifstream ifile(argv[3]);
-	  
-//	  client c(io_service, argv[1], argv[2], ifile, mapping);
 
     #ifdef GPROFILER
     std::cout << "profiler enable\n";

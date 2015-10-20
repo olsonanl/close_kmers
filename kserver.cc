@@ -11,7 +11,6 @@
 KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 				     const std::string &port,
 				     const std::string &port_file,
-				     KmerPegMapping &mapping,
 				     std::shared_ptr<ThreadPool> thread_pool
     ) :
     io_service_(io_service),
@@ -19,14 +18,22 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
     port_(port),
     port_file_(port_file),
     signals_(io_service_),
-    mapping_(mapping),
     thread_pool_(thread_pool)
 {
     mapping_map_ = std::make_shared<std::map<std::string, std::shared_ptr<KmerPegMapping> > >();
 
     auto x = mapping_map_->insert(std::make_pair("", std::make_shared<KmerPegMapping>()));
     std::cerr << "insert created new: " << x.second << " key='" << x.first->first << "'\n";
-    x.first->second->load_genome_map((*g_parameters)["kmer-data-dir"].as<std::string>() + "/genomes");
+    auto root_mapping = x.first->second;
+    
+    root_mapping->load_genome_map((*g_parameters)["kmer-data-dir"].as<std::string>() + "/genomes");
+    if (g_parameters->count("families-file"))
+    {
+	std::string ff = (*g_parameters)["families-file"].as<std::string>();
+	std::cerr << "Loading families from " << ff << "\n";
+	root_mapping->load_families(ff);
+    }
+
 
     if (g_parameters->count("reserve-mapping"))
     {
