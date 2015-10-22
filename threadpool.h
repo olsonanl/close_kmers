@@ -6,6 +6,7 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/thread/tss.hpp>
+#include "kmer_image.h"
 #include "kguts.h"
 
 class ThreadPool : public std::enable_shared_from_this<ThreadPool>
@@ -27,7 +28,7 @@ public:
     std::string kmer_dir_;
     std::unique_ptr<boost::asio::io_service::work> work_;
 
-    KmerGuts::kmer_memory_image_t *image_;
+    std::shared_ptr<KmerImage> image_;
     boost::thread_specific_ptr<KmerGuts> kguts_;
     boost::thread_specific_ptr<int> thread_index_;
 

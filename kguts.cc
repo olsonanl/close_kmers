@@ -31,16 +31,8 @@ static const  char prot_alpha[20] = {
     'A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y' 
 };
 
-KmerGuts::KmerGuts(const std::string &data_dir, kmer_memory_image_t *image) : KmerGuts()
-{
-    if (image == 0)
-    {
-	image = map_image_file(data_dir);
-    }
-    kmersH = init_kmers(data_dir.c_str(), image);
-}
-
-KmerGuts::KmerGuts() :
+KmerGuts::KmerGuts(const std::string &data_dir, std::shared_ptr<KmerImage> image) :
+    image_(image),
     param_map_(
 	{
 	    { "order_constraint", order_constraint },
@@ -49,7 +41,7 @@ KmerGuts::KmerGuts() :
 	    { "max_gap", max_gap }
 	})
 {
-    kmersH = 0;
+    kmersH = init_kmers(data_dir.c_str());
     
     tot_lookups = 0;
     retry  = 0;
@@ -441,7 +433,7 @@ long long KmerGuts::lookup_hash_entry(sig_kmer_t sig_kmers[],unsigned long long 
     }
 }
 
-KmerGuts::kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long long num_entries, unsigned long long *alloc_sz) {
+kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long long num_entries, unsigned long long *alloc_sz) {
   /*
    * Allocate enough memory to hold the kmer_memory_image_t header plus the hash table itself.
    */
@@ -454,7 +446,7 @@ KmerGuts::kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long
    */
   image->num_sigs = num_entries;
   image->entry_size = sizeof(sig_kmer_t);
-  image->version = (long long) VERSION;
+  image->version = (long long) KMER_VERSION;
 
   sig_kmer_t *sig_kmers = (sig_kmer_t *) (image + 1);
 
@@ -495,8 +487,10 @@ KmerGuts::kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long
   return image;
 }
 
-KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD, kmer_memory_image_t *image) {
+KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
     kmer_handle_t *handle = (kmer_handle_t *) malloc(sizeof(kmer_handle_t));
+
+    kmer_memory_image_t *image = image_->image();
 
     char file[300];
     strcpy(file,dataD);
@@ -538,85 +532,11 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD, kmer_memory_ima
 	fclose(fp);
     }
     else {
-
-	if (image == 0)
-	{
-	    image = map_image_file(dataD);
-	}
-
 	size_hash = image->num_sigs;
 	handle->num_sigs = size_hash;
 	handle->kmer_table = (sig_kmer_t *) (image + 1);
     }
     return handle;
-}
-
-KmerGuts::kmer_memory_image_t *KmerGuts::map_image_file(const std::string &data_dir)
-{
-    std::string fileM = data_dir + "/kmer.table.mem_map";
-    int fd;
-    std::cout << "mmap " << fileM << "\n";
-    if ((fd = open(fileM.c_str(), O_RDONLY)) < 0) {
-	perror("open");
-	exit(1);
-    }
-
-    /*
-     * Set up for creating memory image from file. Start by determining file size
-     * on disk with a stat() call.
-     */
-    struct stat sbuf;
-    if (stat(fileM.c_str(), &sbuf) == -1) {
-	fprintf(stderr, "stat %s failed: %s\n", fileM.c_str(), strerror(errno));
-	exit(1);
-    }
-    unsigned long long file_size = sbuf.st_size;
-    
-    /* 
-     * Memory map.
-     */
-    int flags = MAP_SHARED;
-    
-#ifdef MAP_POPULATE
-    bool do_populate = false;
-    if (g_parameters->count("reserve-mapping"))
-    {
-	do_populate = ! ( (*g_parameters)["no-populate-mmap"].as<bool>() );
-    }
-
-    if (do_populate)
-	flags |= MAP_POPULATE;
-#endif
-    
-    kmer_memory_image_t *image = (kmer_memory_image_t *) mmap((caddr_t)0, file_size, PROT_READ, flags, fd, 0);
-
-    if (image == (kmer_memory_image_t *)(-1)) {
-	fprintf(stderr, "mmap of kmer_table %s failed: %s\n", fileM.c_str(), strerror(errno));
-	exit(1);
-    }
-
-    /* Validate overall file size vs the entry size and number of entries */
-    if (file_size != ((sizeof(sig_kmer_t) * image->num_sigs) + sizeof(kmer_memory_image_t))) {
-	fprintf(stderr, "Version mismatch for file %s: file size does not match\n", fileM.c_str());
-	exit(1);
-    }
-    
-    /* 
-     * Our image is mapped. Validate against the current version of this code.
-     */
-    if (image->version != (long long) VERSION) {
-	fprintf(stderr, "Version mismatch for file %s: file has %lld code has %lld\n", 
-		fileM.c_str(), image->version, (long long) VERSION);
-	exit(1);
-    }
-    
-    if (image->entry_size != (unsigned long long) sizeof(sig_kmer_t)) {
-	fprintf(stderr, "Version mismatch for file %s: file has entry size %lld code has %lld\n",
-		fileM.c_str(), image->entry_size, (unsigned long long) sizeof(sig_kmer_t));
-	exit(1);
-    }
-    fprintf(stderr, "Set size_hash=%lld from file size %lld\n", image->num_sigs, file_size);
-    return image;
 }
 
 

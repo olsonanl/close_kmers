@@ -9,6 +9,11 @@
 #include <vector>
 #include <array>
 
+#ifdef USE_TBB
+#include "tbb/concurrent_unordered_map.h"
+#include "tbb/concurrent_vector.h"
+#endif
+
 class KmerPegMapping
 {
 public:
@@ -24,14 +29,25 @@ public:
     void load_compact_mapping_file(std::istream &kfile);
 
     typedef unsigned long encoded_id_t;
-    typedef std::vector<encoded_id_t> id_set;
-
-    std::map<std::string, encoded_id_t> genome_to_id_;
-    std::map<encoded_id_t, std::string> id_to_genome_;
 
     /* The kmer to peg mapping table. This is huge. */
-       
-    std::unordered_map<encoded_id_t, id_set> kmer_to_id_;
+
+#ifdef USE_TBB
+    typedef tbb::concurrent_vector<encoded_id_t> id_set;
+    typedef tbb::concurrent_unordered_map<encoded_id_t, id_set> map_type_t;
+    typedef tbb::concurrent_unordered_map<std::string, encoded_id_t> genome_to_id_map_t;
+    typedef tbb::concurrent_unordered_map<encoded_id_t, std::string> id_to_genome_map_t;
+#else
+    typedef std::vector<encoded_id_t> id_set;
+    typedef std::unordered_map<encoded_id_t, id_set> map_type_t;
+    typedef std::map<std::string, encoded_id_t> genome_to_id_map_t;
+    typedef std::map<encoded_id_t, std::string> id_to_genome_map_t;
+#endif
+    map_type_t kmer_to_id_;
+
+    genome_to_id_map_t genome_to_id_;
+    id_to_genome_map_t id_to_genome_;
+
 
     /* peg to peg-attributes mapping. */
     struct family_data {

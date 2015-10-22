@@ -1,9 +1,11 @@
 
 ifeq ($(wildcard /Library),) 
 
+BUILD_TOOLS = /disks/patric-common/build-tools
+
 #CXX = /opt/rh/devtoolset-2/root/usr/bin/g++
-CXX = /disks/olson/gcc-4.9.3/bin/g++
-BOOST = /scratch/olson/boost-1.59.0
+CXX = $(BUILD_TOOLS)/bin/g++
+BOOST = $(BUILD_TOOLS)
 #BOOST = /scratch/olson/boost
 STDCPP = -std=c++14 
 THREADLIB = -lpthread -lrt
@@ -17,10 +19,10 @@ endif
 
 default: kser
 
-# OPT = -O3
-OPT = -O2 -pg
-OPT = -g -O3
-# OPT = -g
+OPT = -O3
+#OPT = -O2 -pg
+#OPT = -g -O3
+#OPT = -g
 # OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
 PROFILER_DIR = /scratch/olson/gperftools
@@ -34,10 +36,33 @@ KMC_DIR = ../KMC/kmc_api
 KMC_LIB = $(KMC_DIR)/*.o
 KMC_INC = -I$(KMC_DIR)
 
-CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC)
+TBB_DEBUG = 0
+TBB_INC_DIR = /disks/olson/checkpoint/tbb44_20150728oss/include
+
+ifeq ($(TBB_DEBUG),1)
+TBB_LIB_DIR = /disks/olson/checkpoint/tbb44_20150728oss/build/linux_intel64_gcc_cc4.9.3_libc2.12_kernel2.6.32_debug
+TBB_LIBS = -ltbbmalloc_debug -ltbb_debug
+else
+TBB_LIB_DIR = /disks/olson/checkpoint/tbb44_20150728oss/build/linux_intel64_gcc_cc4.9.3_libc2.12_kernel2.6.32_release
+TBB_LIBS = -ltbbmalloc -ltbb
+endif
+
+ifneq ($(TBB_INC_DIR),"")
+TBB_CFLAGS = -DUSE_TBB -I$(TBB_INC_DIR)
+TBB_LIB = -L$(TBB_LIB_DIR) $(TBB_LIBS)
+endif
+
+#BLCR_DIR = /disks/patric-common/blcr
+
+ifneq ($(BLCR_DIR),)
+BLCR_CFLAGS = -DBLCR_SUPPORT -I$(BLCR_DIR)/include
+BLCR_LIB = -L$(BLCR_DIR)/lib -lcr
+endif
+
+CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) $(BLCR_CFLAGS) $(TBB_CFLAGS)
 CFLAGS = $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC)
 
-LDFLAGS  = -static
+# LDFLAGS  = -static
 
 LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BOOST)/lib/libboost_filesystem.a \
@@ -49,7 +74,9 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BOOST)/lib/libboost_program_options.a \
 	$(THREADLIB) \
 	$(PROFILER_LIB) \
-	$(KMC_LIB)
+	$(KMC_LIB) \
+	$(BLCR_LIB) \
+	$(TBB_LIB)
 
 x.o: x.cc kguts.h
 
@@ -66,7 +93,7 @@ kc: kc.o kmer.o kserver.o krequest.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 kser: kser.o kmer.o kserver.o kguts.o \
-	fasta_parser.o krequest2.o add_request.o threadpool.o matrix_request.o query_request.o lookup_request.o md5.o
+	fasta_parser.o krequest2.o add_request.o threadpool.o matrix_request.o query_request.o lookup_request.o md5.o kmer_image.o
 	$(CXX) $(LDFLAGS) $(OPT) -o kser $^ $(LIBS)
 
 kfile: kfile.o kguts.o fasta_parser.o
@@ -81,37 +108,38 @@ depend:
 # DO NOT DELETE
 
 add_request.o: add_request.h compute_request.h krequest2.h kmer.h klookup.h
-add_request.o: kguts.h fasta_parser.h klookup2.h klookup3.h threadpool.h
-add_request.o: md5.h
+add_request.o: kguts.h kmer_image.h fasta_parser.h klookup2.h klookup3.h
+add_request.o: threadpool.h md5.h
 fasta_parser.o: fasta_parser.h
-kc.o: kmer.h kserver.h krequest2.h klookup.h kguts.h fasta_parser.h
-kc.o: klookup2.h klookup3.h compute_request.h threadpool.h
-kfile.o: kguts.h fasta_parser.h
-kguts.o: kguts.h global.h
-klookup2.o: klookup2.h kmer.h kguts.h fasta_parser.h global.h
+kc.o: kmer.h kserver.h krequest2.h klookup.h kguts.h kmer_image.h
+kc.o: fasta_parser.h klookup2.h klookup3.h compute_request.h threadpool.h
+kfile.o: kguts.h kmer_image.h fasta_parser.h
+kguts.o: kguts.h kmer_image.h global.h
+klookup2.o: klookup2.h kmer.h kguts.h kmer_image.h fasta_parser.h global.h
 klookup3.o: klookup3.h kmer.h global.h
-klookup.o: klookup.h kmer.h kguts.h fasta_parser.h global.h
+klookup.o: klookup.h kmer.h kguts.h kmer_image.h fasta_parser.h global.h
 kmer.o: popen.h kmer.h
 kmerge.o: stringutil.h
-krequest2.o: krequest2.h kmer.h klookup.h kguts.h fasta_parser.h klookup2.h
-krequest2.o: klookup3.h compute_request.h threadpool.h kserver.h global.h
-krequest2.o: add_request.h matrix_request.h prot_seq.h query_request.h
-krequest2.o: lookup_request.h debug.h
-krequest.o: krequest.h kmer.h klookup.h kguts.h fasta_parser.h klookup2.h
-krequest.o: klookup3.h global.h
-kser.o: global.h kmer.h kserver.h krequest2.h klookup.h kguts.h
+kmer_image.o: kmer_image.h global.h
+krequest2.o: krequest2.h kmer.h klookup.h kguts.h kmer_image.h fasta_parser.h
+krequest2.o: klookup2.h klookup3.h compute_request.h threadpool.h kserver.h
+krequest2.o: global.h add_request.h matrix_request.h prot_seq.h
+krequest2.o: query_request.h lookup_request.h debug.h
+krequest.o: krequest.h kmer.h klookup.h kguts.h kmer_image.h fasta_parser.h
+krequest.o: klookup2.h klookup3.h global.h
+kser.o: global.h kmer.h kserver.h krequest2.h klookup.h kguts.h kmer_image.h
 kser.o: fasta_parser.h klookup2.h klookup3.h compute_request.h threadpool.h
-kserver.o: kserver.h kmer.h krequest2.h klookup.h kguts.h fasta_parser.h
-kserver.o: klookup2.h klookup3.h compute_request.h threadpool.h global.h
+kserver.o: kserver.h kmer.h krequest2.h klookup.h kguts.h kmer_image.h
+kserver.o: fasta_parser.h klookup2.h klookup3.h compute_request.h
+kserver.o: threadpool.h global.h
 lookup_request.o: lookup_request.h compute_request.h krequest2.h kmer.h
-lookup_request.o: klookup.h kguts.h fasta_parser.h klookup2.h klookup3.h
-lookup_request.o: threadpool.h prot_seq.h global.h
+lookup_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
+lookup_request.o: klookup3.h threadpool.h prot_seq.h global.h
 matrix_request.o: matrix_request.h compute_request.h krequest2.h kmer.h
-matrix_request.o: klookup.h kguts.h fasta_parser.h klookup2.h klookup3.h
-matrix_request.o: threadpool.h prot_seq.h
+matrix_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
+matrix_request.o: klookup3.h threadpool.h prot_seq.h
 query_request.o: query_request.h compute_request.h krequest2.h kmer.h
-query_request.o: klookup.h kguts.h fasta_parser.h klookup2.h klookup3.h
-query_request.o: threadpool.h
-threadpool.o: threadpool.h kguts.h
-tthr.o: threadpool.h kguts.h
-x.o: kguts.h
+query_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
+query_request.o: klookup3.h threadpool.h
+threadpool.o: threadpool.h kmer_image.h kguts.h
+x.o: kguts.h kmer_image.h

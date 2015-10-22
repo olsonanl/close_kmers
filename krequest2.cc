@@ -7,6 +7,9 @@
 #include <algorithm>
 #include <boost/asio/buffer.hpp>
 #include <boost/array.hpp>
+#ifdef BLCR_SUPPORT
+#include "libcr.h"
+#endif
 
 #include "klookup.h"
 #include "kserver.h"
@@ -24,6 +27,7 @@ const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(
  * $4 = parameters
  * $6 = fragment
  */
+const boost::regex mapping_path_regex("^/mapping/([^/]+)(/(add|matrix|lookup))$");
 
 KmerRequest2::KmerRequest2(std::shared_ptr<KmerRequestServer> server,
 			   boost::asio::io_service &io_service,
@@ -255,6 +259,54 @@ void KmerRequest2::process_request()
 		    io_service_.stop();
 		});
 	}
+#ifdef BLCR_SUPPORT
+	else if (path_ == "/checkpoint")
+	{
+	    cr_checkpoint_handle_t handle;
+	    cr_checkpoint_args_t args;
+	    cr_initialize_checkpoint_args_t(&args);
+
+	    std::ostringstream os;
+	    os << "checkpoint." << getpid();
+	    std::string file(os.str());
+	    int fd;
+	    fd = open(file.c_str(), O_WRONLY | O_CREAT, 0644);
+	    if (fd < 0)
+	    {
+		std::cerr << "Error opening " << file << ": " << strerror(errno) << "\n";
+	    }
+	    
+	    args.cr_scope = CR_SCOPE_TREE;
+	    args.cr_flags = CR_CHKPT_ASYNC_ERR;
+	    args.cr_target = getpid();
+	    args.cr_fd = fd;
+	    args.cr_signal = 0;
+	    args.cr_timeout = 0;
+
+	    thread_pool_->image_->detach();
+	    io_service_.stop();
+	    thread_pool_->io_service_.stop();
+
+	    std::cerr << "Request checkpoint\n";
+	    int rc = cr_request_checkpoint(&args, &handle);
+	    std::cerr << "Request checkpoint: rc=" << rc << "\n";
+	    if (rc == 0)
+	    {
+		rc = cr_wait_checkpoint(&handle, 0);
+		std::cerr << "Wait returns " << rc << "\n";
+		if (rc < 0)
+		{
+		    std::cerr << "Wait error: " << strerror(errno) << "\n";
+		}
+	    }
+	    else
+	    {
+		std::cerr << "Request failed: " << strerror(errno) << "\n";
+	    }
+	    thread_pool_->image_->attach();
+	    respond(200, "OK", "OK\n", [this]() {});
+	}
+#endif
 	else
 	{
 	    respond(404, "Not found", "path not found\n", [this](){ });
@@ -270,8 +322,31 @@ void KmerRequest2::process_request()
 	}
 
 	int len = std::stoi(x->second);
+
+	std::shared_ptr<KmerPegMapping> mapping;
+	std::string key("");
+	std::string action(path_);
+
+	boost::smatch match;
+	if (boost::regex_match(path_, match, mapping_path_regex))
+	{
+	    key = match[1];
+	    action = match[2];	    
+	    std::cerr << "Got keyed mapping '" << key << "' '" << action << "'\n";
+
+	    auto xmap = mapping_map_->find(key);
+	    if (xmap == mapping_map_->end())
+	    {
+		auto ymap = mapping_map_->insert(std::make_pair(key, std::make_shared<KmerPegMapping>()));
+		mapping = ymap.first->second;
+	    }
+	    else
+	    {
+		mapping = xmap->second;
+	    }
+	}
 	
-	if (path_ == "/add")
+	if (action == "/add")
 	{
 	    boost::asio::streambuf s;
 	    std::ostream os(&s);
@@ -280,49 +355,32 @@ void KmerRequest2::process_request()
 	    os << "\n";
 	    boost::asio::write(socket_, s);
 
-	    auto xmap = mapping_map_->find("");
-	    if (xmap == mapping_map_->end())
-	    {
-		std::cerr << "could not find global mapping\n";
-		exit(1);
-	    }
-
-	    auto add_request = std::make_shared<AddRequest>(shared_from_this(), xmap->second, len);
+	    auto add_request = std::make_shared<AddRequest>(shared_from_this(), mapping, len);
 	    add_request->run();
 	    active_request_ = add_request;
 	}   
-	else if (path_ == "/matrix")
+	else if (action == "/matrix")
 	{
-	    auto xmap = mapping_map_->find("");
-	    if (xmap == mapping_map_->end())
-	    {
-		std::cerr << "could not find global mapping\n";
-		exit(1);
-	    }
-
-	    auto matrix_request = std::make_shared<MatrixRequest>(shared_from_this(), xmap->second, len);
+	    auto matrix_request = std::make_shared<MatrixRequest>(shared_from_this(), mapping, len);
 	    matrix_request->run();
 	    active_request_ = matrix_request;
 	}   
-	else if (path_ == "/lookup")
+	else if (action == "/lookup")
 	{
-	    auto xmap = mapping_map_->find("");
-	    if (xmap == mapping_map_->end())
-	    {
-		std::cerr << "could not find global mapping\n";
-		exit(1);
-	    }
-
-	    auto lookup_request = std::make_shared<LookupRequest>(shared_from_this(), xmap->second, len);
+	    auto lookup_request = std::make_shared<LookupRequest>(shared_from_this(), mapping, len);
 	    lookup_request->run();
 	    active_request_ = lookup_request;
 	}   
-	else if (path_ == "/query")
+	else if (action == "/query")
 	{
 	    auto query_request = std::make_shared<QueryRequest>(shared_from_this(), len);
 	    query_request->run();
 	    active_request_ = query_request;
-	}   
+	}
+	else
+	{
+	    respond(404, "Not found", "path not found\n", [this](){ });
+	}
     }
 }
 

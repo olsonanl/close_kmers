@@ -107,6 +107,9 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 
 		// std::cout << "compute in " << pthread_self() << "\n";
 
+		#ifdef USE_TBB
+		KmerPegMapping &m = *mapping_;
+		#endif
 		for (auto x: *cur)
 		{
 		    std::string &id = x.first;
@@ -126,7 +129,6 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 		    auto calls = std::make_shared<std::vector<KmerCall> >();
 		    auto stats = std::make_shared<KmerOtuStats>();
 		    kguts->process_aa_seq_hits(id.c_str(), seq.c_str(), seq.size(), calls, hits, stats);
-		    seq_hits->push_back(std::make_pair(id, hits));
 		    if (!silent_)
 		    {
 			os << "PROTEIN-ID\t" << id << "\t" << seq.size() << "\n";
@@ -136,13 +138,25 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 			}
 			os << kguts->format_otu_stats(id, seq.size(), *stats);
 		    }
+		    #ifdef USE_TBB
+		    KmerPegMapping::encoded_id_t enc_id = m.encode_id(id);
+		    std::vector<KmerGuts::sig_kmer_t> &hlist = *hits;
+		    for (auto hit: hlist)
+		    {
+			m.add_mapping(enc_id, hit.which_kmer);
+		    }
+		    #else
+		    seq_hits->push_back(std::make_pair(id, hits));
+		    #endif
 		}
+		
 		owner_->io_service().post([this, sbuf, seq_hits, err](){
 			/*
 			 * Back in the main thread here. We can write our response.
 			 */
 			// std::cout << "post response in " << pthread_self() << "\n";
 
+			#ifndef USE_TBB
 			for (auto result: *seq_hits)
 			{
 			    const std::string &id = result.first;
@@ -152,6 +166,7 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 				mapping_->add_mapping(enc_id, hit.which_kmer);
 			    }
 			}
+			#endif
 			
 
 			boost::asio::async_write(owner_->socket(), *sbuf,

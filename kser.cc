@@ -8,6 +8,10 @@
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 
+#ifdef BLCR_SUPPORT
+#include "libcr.h"
+#endif
+
 #ifdef GPROFILER
 #include <gperftools/profiler.h>
 #endif
@@ -97,6 +101,11 @@ int main(int argc, char* argv[])
     }
     */
     
+    #ifdef BLCR_SUPPORT
+    // g_cr_client_id = cr_init();
+    #endif
+
+
     boost::asio::io_service io_service;
 
     std::shared_ptr<ThreadPool> tp = std::make_shared<ThreadPool>(kmer_data);
