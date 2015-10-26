@@ -36,7 +36,7 @@ KmerRequest2::KmerRequest2(std::shared_ptr<KmerRequestServer> server,
 								      io_service_(io_service),
 								      socket_(io_service_),
 								      mapping_map_(mapping_map),
-								      request_(16384),
+								      request_(65536),
 								      thread_pool_(thread_pool)
 							      
 {
@@ -209,7 +209,24 @@ void KmerRequest2::read_headers(boost::system::error_code err, size_t bytes)
 		respond(501, "Chunked encoding not implemented",  "Chunked encoding not implemented\n", [this](){ });
 		return;
 	    }
-	    process_request();
+	    try {
+		process_request();
+	    }
+	    catch (std::exception &e)
+	    {
+		std::ostringstream o;
+		o << "Caught exception " << e.what() << "\n";
+		std::cerr << o.str();
+		respond(500, "Failed", o.str(), [](){});
+	    }
+	    catch (...)
+	    {
+		std::ostringstream o;
+		o << "Caught default exception\n";
+		std::cerr << o.str();
+		respond(500, "Failed", o.str(), [](){});
+	    }
+		    
 	}
 	else
 	{
@@ -333,17 +350,17 @@ void KmerRequest2::process_request()
 	    key = match[1];
 	    action = match[2];	    
 	    std::cerr << "Got keyed mapping '" << key << "' '" << action << "'\n";
+	}
 
-	    auto xmap = mapping_map_->find(key);
-	    if (xmap == mapping_map_->end())
-	    {
-		auto ymap = mapping_map_->insert(std::make_pair(key, std::make_shared<KmerPegMapping>()));
-		mapping = ymap.first->second;
-	    }
-	    else
-	    {
-		mapping = xmap->second;
-	    }
+	auto xmap = mapping_map_->find(key);
+	if (xmap == mapping_map_->end())
+	{
+	    auto ymap = mapping_map_->insert(std::make_pair(key, std::make_shared<KmerPegMapping>()));
+	    mapping = ymap.first->second;
+	}
+	else
+	{
+	    mapping = xmap->second;
 	}
 	
 	if (action == "/add")

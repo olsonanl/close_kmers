@@ -8,6 +8,7 @@
 #include <boost/thread/tss.hpp>
 #include "kmer_image.h"
 #include "kguts.h"
+#include "numa.h"
 
 class ThreadPool : public std::enable_shared_from_this<ThreadPool>
 {
@@ -24,6 +25,8 @@ public:
 	post(BOOST_ASIO_MOVE_ARG(CompletionHandler) handler) {
 	io_service_.post(handler);
     };
+
+    Numa numa_;
 
     std::string kmer_dir_;
     std::unique_ptr<boost::asio::io_service::work> work_;

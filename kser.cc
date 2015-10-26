@@ -110,6 +110,8 @@ int main(int argc, char* argv[])
 
     std::shared_ptr<ThreadPool> tp = std::make_shared<ThreadPool>(kmer_data);
 
+    // tp->numa_.bind_memory();
+
     std::shared_ptr<KmerRequestServer> kserver = std::make_shared<KmerRequestServer>(io_service, listen_port, listen_port_file,
 										     tp);
 

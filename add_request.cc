@@ -107,47 +107,63 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 
 		// std::cout << "compute in " << pthread_self() << "\n";
 
-		#ifdef USE_TBB
+#ifdef USE_TBB
 		KmerPegMapping &m = *mapping_;
-		#endif
-		for (auto x: *cur)
-		{
-		    std::string &id = x.first;
-		    std::string &seq = x.second;
-		    /*
-		    md5_state_t mstate;
-		    md5_init(&mstate);
-		    for (char c: seq)
+#endif
+		try {
+		    for (auto x: *cur)
 		    {
-			md5_byte_t u = toupper(c);
-			md5_append(&mstate, &u, 1);
-		    }
-		    std::array<unsigned char, 16> &c = (*md5s)[id];
-		    md5_finish(&mstate, c.data());
-		    */
-		    hlist_t hits = std::make_shared<std::vector<KmerGuts::sig_kmer_t> >();
-		    auto calls = std::make_shared<std::vector<KmerCall> >();
-		    auto stats = std::make_shared<KmerOtuStats>();
-		    kguts->process_aa_seq_hits(id.c_str(), seq.c_str(), seq.size(), calls, hits, stats);
-		    if (!silent_)
-		    {
-			os << "PROTEIN-ID\t" << id << "\t" << seq.size() << "\n";
-			for (auto c: *calls)
+			std::string &id = x.first;
+			std::string &seq = x.second;
+			/*
+			  md5_state_t mstate;
+			  md5_init(&mstate);
+			  for (char c: seq)
+			  {
+			  md5_byte_t u = toupper(c);
+			  md5_append(&mstate, &u, 1);
+			  }
+			  std::array<unsigned char, 16> &c = (*md5s)[id];
+			  md5_finish(&mstate, c.data());
+			*/
+			hlist_t hits = std::make_shared<std::vector<KmerGuts::sig_kmer_t> >();
+			auto calls = std::make_shared<std::vector<KmerCall> >();
+			auto stats = std::make_shared<KmerOtuStats>();
+			kguts->process_aa_seq_hits(id.c_str(), seq.c_str(), seq.size(), calls, hits, stats);
+			if (!silent_)
 			{
-			    os << kguts->format_call(c);
+			    os << "PROTEIN-ID\t" << id << "\t" << seq.size() << "\n";
+			    for (auto c: *calls)
+			    {
+				os << kguts->format_call(c);
+			    }
+			    os << kguts->format_otu_stats(id, seq.size(), *stats);
 			}
-			os << kguts->format_otu_stats(id, seq.size(), *stats);
+#ifdef USE_TBB
+			KmerPegMapping::encoded_id_t enc_id = m.encode_id(id);
+			std::vector<KmerGuts::sig_kmer_t> &hlist = *hits;
+			for (auto hit: hlist)
+			{
+			    m.add_mapping(enc_id, hit.which_kmer);
+			}
+#else
+			seq_hits->push_back(std::make_pair(id, hits));
+#endif
 		    }
-		    #ifdef USE_TBB
-		    KmerPegMapping::encoded_id_t enc_id = m.encode_id(id);
-		    std::vector<KmerGuts::sig_kmer_t> &hlist = *hits;
-		    for (auto hit: hlist)
-		    {
-			m.add_mapping(enc_id, hit.which_kmer);
-		    }
-		    #else
-		    seq_hits->push_back(std::make_pair(id, hits));
-		    #endif
+		}
+		catch (std::exception &e)
+		{
+		    std::cerr << "ending add_request due to exception " << e.what() << "\n";
+		    owner_->socket().close();
+		    owner_->exit_request();
+		    return;
+		}
+		catch (...)
+		{
+		    std::cerr << "ending add_request due to default exception\n";
+		    owner_->socket().close();
+		    owner_->exit_request();
+		    return;
 		}
 		
 		owner_->io_service().post([this, sbuf, seq_hits, err](){

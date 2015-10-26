@@ -1,0 +1,77 @@
+compute times
+
+server 1 thread no TBB, client 4
+
+real   12m30.688s
+user   0m4.848s
+sys    0m12.375s
+
+
+server 1 thread,client 4
+
+real   15m5.309s
+user   0m5.188s
+sys    0m12.520s
+
+
+server 12 threads, nomemlock, bound 1 per core
+client 18 procs
+
+real	3m17.231s
+user	0m5.172s
+sys	0m13.001s
+
+server 12 threads, nomemlock, bound 1 per core
+client 12 procs
+
+real   3m28.942s
+user   0m5.016s
+sys    0m12.172s
+
+real	3m31.906s
+user	0m4.974s
+sys	0m12.279s
+
+server 12 threads, nomemlock, nobind
+client 12 procs
+
+
+real   3m12.411s
+user   0m4.766s
+sys    0m12.170s
+
+real   3m10.713s
+user   0m4.923s
+sys    0m12.030s
+
+server 12 threads, memlock
+client 12 procs
+
+real   3m21.573s
+user   0m3.870s
+sys    0m10.800s
+
+
+server 6 threads, memlock
+client 12 procs
+
+real   3m48.427s
+user   0m4.123s
+sys    0m11.359s
+
+real   3m23.008s
+user   0m3.878s
+sys    0m11.120s
+
+real   3m22.583s
+user   0m4.186s
+sys    0m11.126s
+
+server 6 threads no memlock
+real   3m22.599s
+user   0m4.026s
+sys    0m11.133s
+
+real   3m22.515s
+user   0m3.927s
+sys    0m10.884s

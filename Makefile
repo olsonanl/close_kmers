@@ -1,7 +1,7 @@
 
 ifeq ($(wildcard /Library),) 
 
-BUILD_TOOLS = /disks/patric-common/build-tools
+BUILD_TOOLS = /disks/patric-common/runtime/gcc-4.9.3
 
 #CXX = /opt/rh/devtoolset-2/root/usr/bin/g++
 CXX = $(BUILD_TOOLS)/bin/g++
@@ -9,6 +9,8 @@ BOOST = $(BUILD_TOOLS)
 #BOOST = /scratch/olson/boost
 STDCPP = -std=c++14 
 THREADLIB = -lpthread -lrt
+
+CXX_LDFLAGS = -Wl,-rpath,$(BUILD_TOOLS)/lib64
 
 else 
 
@@ -19,11 +21,20 @@ endif
 
 default: kser
 
+BUILD_DEBUG = 0
+
+ifeq ($(BUILD_DEBUG),1)
+OPT = -g
+
+# OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
+
+else
+
 OPT = -O3
 #OPT = -O2 -pg
 #OPT = -g -O3
-#OPT = -g
-# OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
+
+endif
 
 PROFILER_DIR = /scratch/olson/gperftools
 
@@ -35,6 +46,10 @@ INC = -I$(BOOST)/include
 KMC_DIR = ../KMC/kmc_api
 KMC_LIB = $(KMC_DIR)/*.o
 KMC_INC = -I$(KMC_DIR)
+
+USE_TBB = 0
+
+ifneq ($(USE_TBB),0)
 
 TBB_DEBUG = 0
 TBB_INC_DIR = /disks/olson/checkpoint/tbb44_20150728oss/include
@@ -50,6 +65,9 @@ endif
 ifneq ($(TBB_INC_DIR),"")
 TBB_CFLAGS = -DUSE_TBB -I$(TBB_INC_DIR)
 TBB_LIB = -L$(TBB_LIB_DIR) $(TBB_LIBS)
+TBB_LDFLAGS = -Wl,-rpath,$(TBB_LIB_DIR) 
+endif
+
 endif
 
 #BLCR_DIR = /disks/patric-common/blcr
@@ -63,6 +81,7 @@ CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) $(BLCR_CFLAGS) $(T
 CFLAGS = $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC)
 
 # LDFLAGS  = -static
+LDFLAGS = $(TBB_LDFLAGS) $(CXX_LDFLAGS)
 
 LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BOOST)/lib/libboost_filesystem.a \
@@ -76,7 +95,8 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(PROFILER_LIB) \
 	$(KMC_LIB) \
 	$(BLCR_LIB) \
-	$(TBB_LIB)
+	$(TBB_LIB) \
+	-lhwloc
 
 x.o: x.cc kguts.h
 
@@ -93,7 +113,8 @@ kc: kc.o kmer.o kserver.o krequest.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 kser: kser.o kmer.o kserver.o kguts.o \
-	fasta_parser.o krequest2.o add_request.o threadpool.o matrix_request.o query_request.o lookup_request.o md5.o kmer_image.o
+	fasta_parser.o krequest2.o add_request.o threadpool.o matrix_request.o query_request.o lookup_request.o \
+	md5.o kmer_image.o numa.o
 	$(CXX) $(LDFLAGS) $(OPT) -o kser $^ $(LIBS)
 
 kfile: kfile.o kguts.o fasta_parser.o
