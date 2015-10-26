@@ -1,3 +1,5 @@
+#ifdef USE_NUMA
+
 #include "numa.h"
 
 #include <hwloc.h>
@@ -71,5 +73,7 @@ int main()
 	std::cout << x << "\n";
     }
 }
+
+#endif
 
 #endif

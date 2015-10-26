@@ -23,7 +23,9 @@ void ThreadPool::start(int n_threads)
     {
 	thread_pool_.create_thread([this, thread](){
 		// std::cout << "setting up thread " << thread << "\n";
+#ifdef USE_NUMA
 		numa_.bind_index(thread);
+#endif
 		
 		kguts_.reset(new KmerGuts(kmer_dir_, image_));
 		thread_index_.reset(new int(thread));

@@ -1,3 +1,4 @@
+#ifdef USE_NUMA
 #ifndef _numa_h
 #define _numa_h
 
@@ -28,5 +29,7 @@ inline std::ostream &operator<<(std::ostream &os, const hwloc_cpuset_t &set)
     os << x;
     return os;
 }
+
+#endif
 
 #endif

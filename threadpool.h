@@ -26,7 +26,9 @@ public:
 	io_service_.post(handler);
     };
 
+#ifdef USE_NUMA
     Numa numa_;
+#endif
 
     std::string kmer_dir_;
     std::unique_ptr<boost::asio::io_service::work> work_;

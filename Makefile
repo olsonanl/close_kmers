@@ -47,18 +47,21 @@ KMC_DIR = ../KMC/kmc_api
 KMC_LIB = $(KMC_DIR)/*.o
 KMC_INC = -I$(KMC_DIR)
 
-USE_TBB = 0
+USE_TBB = 1
+USE_NUMA = 0
 
 ifneq ($(USE_TBB),0)
 
 TBB_DEBUG = 0
-TBB_INC_DIR = /disks/olson/checkpoint/tbb44_20150728oss/include
+TBB_INC_DIR = $(BUILD_TOOLS)/include
 
 ifeq ($(TBB_DEBUG),1)
-TBB_LIB_DIR = /disks/olson/checkpoint/tbb44_20150728oss/build/linux_intel64_gcc_cc4.9.3_libc2.12_kernel2.6.32_debug
+TBB_LIB_DIR = $(BUILD_TOOLS)/lib
+#TBB_LIB_DIR = /disks/olson/checkpoint/tbb44_20150728oss/build/linux_intel64_gcc_cc4.9.3_libc2.12_kernel2.6.32_debug
 TBB_LIBS = -ltbbmalloc_debug -ltbb_debug
 else
-TBB_LIB_DIR = /disks/olson/checkpoint/tbb44_20150728oss/build/linux_intel64_gcc_cc4.9.3_libc2.12_kernel2.6.32_release
+TBB_LIB_DIR = $(BUILD_TOOLS)/lib
+#TBB_LIB_DIR = /disks/olson/checkpoint/tbb44_20150728oss/build/linux_intel64_gcc_cc4.9.3_libc2.12_kernel2.6.32_release
 TBB_LIBS = -ltbbmalloc -ltbb
 endif
 
@@ -70,6 +73,13 @@ endif
 
 endif
 
+ifneq ($(USE_NUMA),0)
+
+NUMA_LIBS = -lhwloc
+NUMA_CFLAGS = -DUSE_NUMA
+
+endif
+
 #BLCR_DIR = /disks/patric-common/blcr
 
 ifneq ($(BLCR_DIR),)
@@ -77,7 +87,7 @@ BLCR_CFLAGS = -DBLCR_SUPPORT -I$(BLCR_DIR)/include
 BLCR_LIB = -L$(BLCR_DIR)/lib -lcr
 endif
 
-CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) $(BLCR_CFLAGS) $(TBB_CFLAGS)
+CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) $(BLCR_CFLAGS) $(TBB_CFLAGS) $(NUMA_CFLAGS)
 CFLAGS = $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC)
 
 # LDFLAGS  = -static
@@ -96,7 +106,7 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(KMC_LIB) \
 	$(BLCR_LIB) \
 	$(TBB_LIB) \
-	-lhwloc
+	$(NUMA_LIBS)
 
 x.o: x.cc kguts.h
 
