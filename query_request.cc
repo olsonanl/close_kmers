@@ -97,7 +97,7 @@ void QueryRequest::on_data(boost::system::error_code err, size_t bytes)
 		    
 		    auto calls = std::make_shared<std::vector<KmerCall> >();
 		    auto stats = std::make_shared<KmerOtuStats>();
-		    kguts->process_aa_seq(id.c_str(), seq.c_str(), seq.size(), calls, 0, stats);
+		    kguts->process_aa_seq(id, seq, calls, 0, stats);
 		    os << "PROTEIN-ID\t" << id << "\t" << seq.size() << "\n";
 		    for (auto c: *calls)
 		    {

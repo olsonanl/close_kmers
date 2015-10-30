@@ -726,20 +726,24 @@ void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq
     num_hits = 0;
 }
 
-void KmerGuts::process_aa_seq_hits(const char *id,const char *pseq,size_t ln,
+void KmerGuts::process_aa_seq_hits(const std::string &id, const std::string &seq,
 			      std::shared_ptr<std::vector<KmerCall>> calls,
 			      std::shared_ptr<std::vector<sig_kmer_t>> hits,
 			      std::shared_ptr<KmerOtuStats> otu_stats)
 {
     auto cb = [this, hits](sig_kmer_t &k) { hits->push_back(k); };
-    process_aa_seq(id, pseq, ln, calls, cb, otu_stats);
+    process_aa_seq(id, seq, calls, cb, otu_stats);
 }
 
-void KmerGuts::process_aa_seq(const char *id,const char *pseq,size_t ln,
+void KmerGuts::process_aa_seq(const std::string &idstr, const std::string &seqstr,
 			      std::shared_ptr<std::vector<KmerCall>> calls,
 			      std::function<void(sig_kmer_t &)> hit_cb,
 			      std::shared_ptr<KmerOtuStats> otu_stats)
 {
+    const char *id = idstr.c_str();
+    const char *pseq = seqstr.c_str();
+    size_t ln = seqstr.size();
+
     strcpy(current_id,id);
     current_length_contig = ln;
     current_strand        = '+';

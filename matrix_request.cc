@@ -89,7 +89,7 @@ void MatrixRequest::on_data(boost::system::error_code err, size_t bytes)
 		    
 		    matrix_proteins_[eid] = seq.size();
 		    
-		    kguts->process_aa_seq(id.c_str(), seq.c_str(), id.size(), 0,
+		    kguts->process_aa_seq(id, seq, 0,
 					  std::bind(&MatrixRequest::on_hit, this, eid, std::placeholders::_1),
 					  0);
 		}
@@ -100,7 +100,7 @@ void MatrixRequest::on_data(boost::system::error_code err, size_t bytes)
 			// std::cout << "post response in " << pthread_self() << "\n";
 
 			boost::asio::async_write(owner_->socket(), *sbuf,
-						 [this, err](const boost::system::error_code &err2, const long unsigned int &bytes2){
+						 [this, err, sbuf](const boost::system::error_code &err2, const long unsigned int &bytes2){
 						     // std::cerr << "write done in " << pthread_self() << " err=" << err << " content_length=" << content_length_ <<"\n";
 						     if (err == boost::asio::error::eof || content_length_ == 0)
 						     {

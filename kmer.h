@@ -32,23 +32,6 @@ public:
 
     /* The kmer to peg mapping table. This is huge. */
 
-#ifdef USE_TBB
-    typedef tbb::concurrent_vector<encoded_id_t> id_set;
-    typedef tbb::concurrent_unordered_map<encoded_id_t, id_set> map_type_t;
-    typedef tbb::concurrent_unordered_map<std::string, encoded_id_t> genome_to_id_map_t;
-    typedef tbb::concurrent_unordered_map<encoded_id_t, std::string> id_to_genome_map_t;
-#else
-    typedef std::vector<encoded_id_t> id_set;
-    typedef std::unordered_map<encoded_id_t, id_set> map_type_t;
-    typedef std::map<std::string, encoded_id_t> genome_to_id_map_t;
-    typedef std::map<encoded_id_t, std::string> id_to_genome_map_t;
-#endif
-    map_type_t kmer_to_id_;
-
-    genome_to_id_map_t genome_to_id_;
-    id_to_genome_map_t id_to_genome_;
-
-
     /* peg to peg-attributes mapping. */
     struct family_data {
 	std::string pgf;
@@ -57,7 +40,26 @@ public:
 	family_data(const std::string a, const std::string b, const std::string c)
 	: pgf(a), plf(b), function(c) {};
     };
-    std::unordered_map<encoded_id_t, family_data> family_mapping_;
+
+#ifdef USE_TBB
+    typedef tbb::concurrent_vector<encoded_id_t> id_set;
+    typedef tbb::concurrent_unordered_map<encoded_id_t, id_set> map_type_t;
+    typedef tbb::concurrent_unordered_map<std::string, encoded_id_t> genome_to_id_map_t;
+    typedef tbb::concurrent_unordered_map<encoded_id_t, std::string> id_to_genome_map_t;
+    typedef tbb::concurrent_unordered_map<encoded_id_t, family_data> family_map_t;
+#else
+    typedef std::vector<encoded_id_t> id_set;
+    typedef std::unordered_map<encoded_id_t, id_set> map_type_t;
+    typedef std::map<std::string, encoded_id_t> genome_to_id_map_t;
+    typedef std::map<encoded_id_t, std::string> id_to_genome_map_t;
+    typedef std::unordered_map<encoded_id_t, family_data> family_map_t;
+#endif
+    map_type_t kmer_to_id_;
+
+    genome_to_id_map_t genome_to_id_;
+    id_to_genome_map_t id_to_genome_;
+
+    family_map_t family_mapping_;
     void load_families(const std::string &families_file);
 
     /*

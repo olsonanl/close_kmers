@@ -272,7 +272,12 @@ void KmerPegMapping::load_families(const std::string &families_file)
        
     size_t size_estimate = fsize * lines / sample_size;
     std::cerr << "fsize=" << fsize << " line estimate=" << size_estimate << "\n";
+    
+    #ifdef USE_TBB
+    family_mapping_.rehash(size_estimate * 10);
+    #else
     family_mapping_.reserve(size_estimate * 10);
+    #endif
     
     while (std::getline(f, line))
     {

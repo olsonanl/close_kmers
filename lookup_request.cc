@@ -95,57 +95,62 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 		kguts->set_parameters(owner_->parameters());
 
 		auto sbuf = std::make_shared<boost::asio::streambuf>();
-		std::ostream os(sbuf.get());
-
-		if (!header_written_)
 		{
-		    owner_->write_header(os, 200, "OK");
-		    os << "\n";
-		    header_written_ = true;
-		}
+		    std::ostream os(sbuf.get());
 
-		for (auto work_item: *cur)
-		{
-		    auto id = work_item.id();
-		    auto seq = work_item.seq();
-		    
-		    hit_count_.clear();
-		    
-		    kguts->process_aa_seq(id.c_str(), seq.c_str(), id.size(), 0,
-					  std::bind(&LookupRequest::on_hit, this, std::placeholders::_1),
-					  0);
-
-
-		    typedef std::pair<KmerPegMapping::encoded_id_t, unsigned int> data_t;
-
-		    std::vector<data_t> vec;
-		    for (auto it: hit_count_)
+		    if (!header_written_)
 		    {
-			vec.push_back(it);
-		    }
-
-		    std::sort(vec.begin(), vec.end(), less_second<data_t>()); 
-
-		    os << id << "\n";
-		    for (auto it: vec)
-		    {
-			auto eid = it.first;
-			auto score = it.second;
-			
-			if (score < kmer_hit_threshold_)
-			    break;
-			std::string peg = mapping_->decode_id(eid);
-			os << peg << "\t" << score;
-
-			auto fhit = mapping_->family_mapping_.find(eid);
-			if (fhit != mapping_->family_mapping_.end())
-			{
-			    os << "\t" << fhit->second.pgf << "\t" << fhit->second.plf << "\t" << fhit->second.function;
-			}
+			owner_->write_header(os, 200, "OK");
 			os << "\n";
+			header_written_ = true;
 		    }
-		    os << "//\n";
 
+		    for (auto work_item: *cur)
+		    {
+			auto id = work_item.id();
+			auto seq = work_item.seq();
+		    
+			hit_count_.clear();
+
+			// std::cerr << "Lookup " << id << " " << seq << "\n";
+			kguts->process_aa_seq(id, seq, 0,
+					      std::bind(&LookupRequest::on_hit, this, std::placeholders::_1),
+					      0);
+
+
+			typedef std::pair<KmerPegMapping::encoded_id_t, unsigned int> data_t;
+
+			std::vector<data_t> vec;
+			for (auto it: hit_count_)
+			{
+			    vec.push_back(it);
+			}
+
+			std::sort(vec.begin(), vec.end(), less_second<data_t>()); 
+
+			os << id << "\n";
+			for (auto it: vec)
+			{
+			    auto eid = it.first;
+			    auto score = it.second;
+			
+			    if (score < kmer_hit_threshold_)
+				break;
+			    std::string peg = mapping_->decode_id(eid);
+			    os << peg << "\t" << score;
+			    // os << eid << "\t" << peg << "\t" << score;
+
+			    auto fhit = mapping_->family_mapping_.find(eid);
+			    if (fhit != mapping_->family_mapping_.end())
+			    {
+				os << "\t" << fhit->second.pgf << "\t" << fhit->second.plf << "\t" << fhit->second.function;
+			    }
+			    os << "\n";
+			}
+			os << "//\n";
+
+		    }
+		    os.flush();
 		}
 		owner_->io_service().post([this, sbuf, err](){
 			/*
@@ -153,9 +158,11 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 			 */
 			// std::cout << "post response in " << pthread_self() << "\n";
 
-			boost::asio::async_write(owner_->socket(), *sbuf,
-						 [this, err](const boost::system::error_code &err2, const long unsigned int &bytes2){
-						     // std::cerr << "write done in " << pthread_self() << " err=" << err << " content_length=" << content_length_ <<"\n";
+			std::cerr << "write results size " << sbuf->size() << "\n";
+			boost::asio::async_write(owner_->socket(), boost::asio::buffer(sbuf->data()),
+						 [this, err, sbuf](const boost::system::error_code &err2, const long unsigned int &bytes2){
+						     std::cerr << "write done in " << pthread_self() << " err=" << err.message() << " content_length=" << content_length_ <<"\n";
+						     std::cerr << "   err2=" << err2.message() << " bytes2=" << bytes2 << "\n";
 						     if (err == boost::asio::error::eof || content_length_ == 0)
 						     {
 							 process_results();

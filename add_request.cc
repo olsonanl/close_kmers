@@ -129,7 +129,7 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 			hlist_t hits = std::make_shared<std::vector<KmerGuts::sig_kmer_t> >();
 			auto calls = std::make_shared<std::vector<KmerCall> >();
 			auto stats = std::make_shared<KmerOtuStats>();
-			kguts->process_aa_seq_hits(id.c_str(), seq.c_str(), seq.size(), calls, hits, stats);
+			kguts->process_aa_seq_hits(id, seq, calls, hits, stats);
 			if (!silent_)
 			{
 			    os << "PROTEIN-ID\t" << id << "\t" << seq.size() << "\n";

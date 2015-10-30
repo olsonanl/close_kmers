@@ -315,12 +315,12 @@ public:
 		     std::function<void(sig_kmer_t &)> hit_cb,
 		     std::shared_ptr<KmerOtuStats> otu_stats);
 	
-    void process_aa_seq(const char *id,const char *pseq,size_t ln,
+    void process_aa_seq(const std::string &id, const std::string &seq,
 			std::shared_ptr<std::vector<KmerCall>> calls,
 			std::function<void(sig_kmer_t &)> hit_cb,
 			std::shared_ptr<KmerOtuStats> otu_stats);
 
-    void process_aa_seq_hits(const char *id,const char *pseq,size_t ln,
+    void process_aa_seq_hits(const std::string &id, const std::string &seq,
 			std::shared_ptr<std::vector<KmerCall>> calls,
 			std::shared_ptr<std::vector<sig_kmer_t>> hits,
 			std::shared_ptr<KmerOtuStats> otu_stats);

@@ -140,10 +140,11 @@ depend:
 
 add_request.o: add_request.h compute_request.h krequest2.h kmer.h klookup.h
 add_request.o: kguts.h kmer_image.h fasta_parser.h klookup2.h klookup3.h
-add_request.o: threadpool.h md5.h
+add_request.o: threadpool.h numa.h md5.h
 fasta_parser.o: fasta_parser.h
 kc.o: kmer.h kserver.h krequest2.h klookup.h kguts.h kmer_image.h
 kc.o: fasta_parser.h klookup2.h klookup3.h compute_request.h threadpool.h
+kc.o: numa.h
 kfile.o: kguts.h kmer_image.h fasta_parser.h
 kguts.o: kguts.h kmer_image.h global.h
 klookup2.o: klookup2.h kmer.h kguts.h kmer_image.h fasta_parser.h global.h
@@ -153,24 +154,25 @@ kmer.o: popen.h kmer.h
 kmerge.o: stringutil.h
 kmer_image.o: kmer_image.h global.h
 krequest2.o: krequest2.h kmer.h klookup.h kguts.h kmer_image.h fasta_parser.h
-krequest2.o: klookup2.h klookup3.h compute_request.h threadpool.h kserver.h
-krequest2.o: global.h add_request.h matrix_request.h prot_seq.h
+krequest2.o: klookup2.h klookup3.h compute_request.h threadpool.h numa.h
+krequest2.o: kserver.h global.h add_request.h matrix_request.h prot_seq.h
 krequest2.o: query_request.h lookup_request.h debug.h
 krequest.o: krequest.h kmer.h klookup.h kguts.h kmer_image.h fasta_parser.h
 krequest.o: klookup2.h klookup3.h global.h
 kser.o: global.h kmer.h kserver.h krequest2.h klookup.h kguts.h kmer_image.h
 kser.o: fasta_parser.h klookup2.h klookup3.h compute_request.h threadpool.h
+kser.o: numa.h
 kserver.o: kserver.h kmer.h krequest2.h klookup.h kguts.h kmer_image.h
 kserver.o: fasta_parser.h klookup2.h klookup3.h compute_request.h
-kserver.o: threadpool.h global.h
+kserver.o: threadpool.h numa.h global.h
 lookup_request.o: lookup_request.h compute_request.h krequest2.h kmer.h
 lookup_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
-lookup_request.o: klookup3.h threadpool.h prot_seq.h global.h
+lookup_request.o: klookup3.h threadpool.h numa.h prot_seq.h global.h
 matrix_request.o: matrix_request.h compute_request.h krequest2.h kmer.h
 matrix_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
-matrix_request.o: klookup3.h threadpool.h prot_seq.h
+matrix_request.o: klookup3.h threadpool.h numa.h prot_seq.h
 query_request.o: query_request.h compute_request.h krequest2.h kmer.h
 query_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
-query_request.o: klookup3.h threadpool.h
-threadpool.o: threadpool.h kmer_image.h kguts.h
+query_request.o: klookup3.h threadpool.h numa.h
+threadpool.o: threadpool.h kmer_image.h kguts.h numa.h
 x.o: kguts.h kmer_image.h
