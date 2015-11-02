@@ -158,11 +158,11 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 			 */
 			// std::cout << "post response in " << pthread_self() << "\n";
 
-			std::cerr << "write results size " << sbuf->size() << "\n";
+			// std::cerr << "write results size " << sbuf->size() << "\n";
 			boost::asio::async_write(owner_->socket(), boost::asio::buffer(sbuf->data()),
 						 [this, err, sbuf](const boost::system::error_code &err2, const long unsigned int &bytes2){
-						     std::cerr << "write done in " << pthread_self() << " err=" << err.message() << " content_length=" << content_length_ <<"\n";
-						     std::cerr << "   err2=" << err2.message() << " bytes2=" << bytes2 << "\n";
+						     // std::cerr << "write done in " << pthread_self() << " err=" << err.message() << " content_length=" << content_length_ <<"\n";
+						     // std::cerr << "   err2=" << err2.message() << " bytes2=" << bytes2 << "\n";
 						     if (err == boost::asio::error::eof || content_length_ == 0)
 						     {
 							 process_results();
@@ -191,12 +191,12 @@ int LookupRequest::on_parsed_seq(const std::string &id, const std::string &seq)
     current_work_->push_back(ProteinSequence(id, seq));
 }
 
-void LookupRequest::on_hit(KmerGuts::sig_kmer_t &kmer)
+void LookupRequest::on_hit(KmerGuts::hit_in_sequence_t kmer)
 {
-    auto ki = mapping_->kmer_to_id_.find(kmer.which_kmer);
+    auto ki = mapping_->kmer_to_id_.find(kmer.hit.which_kmer);
     if (ki != mapping_->kmer_to_id_.end())
     {
-	// std::cout << "got mapping for " << kmer.which_kmer << "\n";
+	// std::cout << "got mapping for " << kmer.hit.which_kmer << "\n";
 	for (auto eid: ki->second)
 	{
 	    hit_count_[eid]++;

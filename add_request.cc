@@ -93,7 +93,7 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 	std::cerr << "\n";
 	*/
 
-	typedef std::shared_ptr<std::vector<KmerGuts::sig_kmer_t> > hlist_t;
+	typedef std::shared_ptr<std::vector<KmerGuts::hit_in_sequence_t> > hlist_t;
 	std::shared_ptr<work_list_t> cur = current_work_;
 	//std::vector<std::pair<std::string, hlist_t> > seq_hits;
 	auto seq_hits = std::make_shared<std::vector<std::pair<std::string, hlist_t> > >();
@@ -126,7 +126,7 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 			  std::array<unsigned char, 16> &c = (*md5s)[id];
 			  md5_finish(&mstate, c.data());
 			*/
-			hlist_t hits = std::make_shared<std::vector<KmerGuts::sig_kmer_t> >();
+			hlist_t hits = std::make_shared<std::vector<KmerGuts::hit_in_sequence_t> >();
 			auto calls = std::make_shared<std::vector<KmerCall> >();
 			auto stats = std::make_shared<KmerOtuStats>();
 			kguts->process_aa_seq_hits(id, seq, calls, hits, stats);
@@ -141,10 +141,10 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 			}
 #ifdef USE_TBB
 			KmerPegMapping::encoded_id_t enc_id = m.encode_id(id);
-			std::vector<KmerGuts::sig_kmer_t> &hlist = *hits;
+			std::vector<KmerGuts::hit_in_sequence_t> &hlist = *hits;
 			for (auto hit: hlist)
 			{
-			    m.add_mapping(enc_id, hit.which_kmer);
+			    m.add_mapping(enc_id, hit.hit.which_kmer);
 			}
 #else
 			seq_hits->push_back(std::make_pair(id, hits));

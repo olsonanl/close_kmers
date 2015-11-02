@@ -29,11 +29,18 @@ OPT = -g
 # OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
 else
+ifeq ($(BUILD_DEBUG),2)
+OPT = -g -O3
+
+# OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
+
+else
 
 OPT = -O3
 #OPT = -O2 -pg
 #OPT = -g -O3
 
+endif
 endif
 
 PROFILER_DIR = /scratch/olson/gperftools

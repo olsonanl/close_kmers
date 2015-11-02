@@ -39,7 +39,6 @@ int main(int argc, char* argv[])
     std::string listen_port_file;
     std::string kmer_data;
     std::string peg_kmer_data;
-    std::string families_file;
     int n_kmer_threads;
     bool daemonize;
     std::string pid_file;
@@ -51,8 +50,8 @@ int main(int argc, char* argv[])
 	("peg-kmer-data", po::value<std::string>(&peg_kmer_data), "precomputed PEG/kmer data file")
 	("listen-port,l", po::value<std::string>(&listen_port)->required(), "port to listen on. 0 means to choose a random port")
 	("kmer-data-dir,d", po::value<std::string>(&kmer_data)->required(), "kmer data directory")
-	("families-file", po::value<std::string>(&families_file), "families file")
-	("families-nr", po::value<std::string>(&families_file), "families NR data")
+	("families-file", po::value<std::string>(), "families file")
+	("families-nr", po::value<std::vector<std::string>>()->multitoken(), "families NR data")
 	("reserve-mapping", po::value<int>(), "Reserve this much space in global mapping table")
 	("no-populate-mmap", po::bool_switch(), "Don't populate mmap data at startup")
 	("debug-http", po::bool_switch(), "Debug HTTP protocol")

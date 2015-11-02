@@ -228,6 +228,13 @@ public:
 
     typedef struct sig_kmer sig_kmer_t;
 
+    struct hit_in_sequence_t {
+	sig_kmer_t hit;
+	unsigned int offset;
+
+    hit_in_sequence_t(sig_kmer_t &h, unsigned int o) : hit(h), offset(o) {}
+    };
+
     typedef struct kmer_handle {
 	sig_kmer_t *kmer_table;
 	unsigned long long num_sigs;
@@ -307,22 +314,22 @@ public:
     void gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq,
 		     unsigned char *pIseq,
 		     std::shared_ptr<std::vector<KmerCall>> calls,
-		     std::function<void(sig_kmer_t &)> hit_cb,
+		     std::function<void(hit_in_sequence_t)> hit_cb,
 		     std::shared_ptr<KmerOtuStats> otu_stats);
 	
     void process_seq(const char *id,const char *data,
 		     std::shared_ptr<std::vector<KmerCall>> calls,
-		     std::function<void(sig_kmer_t &)> hit_cb,
+		     std::function<void(hit_in_sequence_t)> hit_cb,
 		     std::shared_ptr<KmerOtuStats> otu_stats);
 	
     void process_aa_seq(const std::string &id, const std::string &seq,
 			std::shared_ptr<std::vector<KmerCall>> calls,
-			std::function<void(sig_kmer_t &)> hit_cb,
+			std::function<void(hit_in_sequence_t)> hit_cb,
 			std::shared_ptr<KmerOtuStats> otu_stats);
 
     void process_aa_seq_hits(const std::string &id, const std::string &seq,
 			std::shared_ptr<std::vector<KmerCall>> calls,
-			std::shared_ptr<std::vector<sig_kmer_t>> hits,
+			std::shared_ptr<std::vector<hit_in_sequence_t>> hits,
 			std::shared_ptr<KmerOtuStats> otu_stats);
 
     kmer_handle_t *init_kmers(const char *dataD);
@@ -333,6 +340,7 @@ public:
     char *function_at_index(int i) { return kmersH->function_array[i]; }
 
     std::string format_call(const KmerCall &c);
+    std::string format_hit(const hit_in_sequence_t &h);
     std::string format_otu_stats(const std::string &id, int size, KmerOtuStats &otu_stats);
 };
 

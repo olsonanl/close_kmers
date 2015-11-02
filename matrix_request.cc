@@ -130,12 +130,12 @@ int MatrixRequest::on_parsed_seq(const std::string &id, const std::string &seq)
     current_work_->push_back(ProteinSequence(id, seq));
 }
 
-void MatrixRequest::on_hit(KmerPegMapping::encoded_id_t id, KmerGuts::sig_kmer_t &kmer)
+void MatrixRequest::on_hit(KmerPegMapping::encoded_id_t id, KmerGuts::hit_in_sequence_t kmer)
 {
-    auto ki = mapping_->kmer_to_id_.find(kmer.which_kmer);
+    auto ki = mapping_->kmer_to_id_.find(kmer.hit.which_kmer);
     if (ki != mapping_->kmer_to_id_.end())
     {
-	// std::cout << "got mapping for " << kmer.which_kmer << "\n";
+	// std::cout << "got mapping for " << kmer.hit.which_kmer << "\n";
 	for (auto eid: ki->second)
 	{
 	    // std::cout << "  " << eid << " " << mapping_->decode_id(eid) << "\n";

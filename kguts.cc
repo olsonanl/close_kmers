@@ -644,7 +644,7 @@ void KmerGuts::process_set_of_hits(std::shared_ptr<std::vector<KmerCall>> calls,
 void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq,
 			   unsigned char *pIseq,
 			   std::shared_ptr<std::vector<KmerCall>> calls,
-			   std::function<void(sig_kmer_t &)> hit_cb,
+			   std::function<void(hit_in_sequence_t)> hit_cb,
 			   std::shared_ptr<KmerOtuStats> otu_stats)
 {
     unsigned char *p = pIseq;
@@ -666,7 +666,10 @@ void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq
 	    int oI          = kmers_hash_entry->otu_index;
 	    float f_wt      = kmers_hash_entry->function_wt;
 	    if (hit_cb)
-		hit_cb(*kmers_hash_entry);
+	    {
+
+		hit_cb(hit_in_sequence_t(*kmers_hash_entry, p - pIseq));
+	    }
 
 	    if ((num_hits > 0) && (hits[num_hits-1].from0_in_prot + max_gap) < (p-pIseq))
 	    {
@@ -728,16 +731,16 @@ void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq
 
 void KmerGuts::process_aa_seq_hits(const std::string &id, const std::string &seq,
 			      std::shared_ptr<std::vector<KmerCall>> calls,
-			      std::shared_ptr<std::vector<sig_kmer_t>> hits,
+			      std::shared_ptr<std::vector<hit_in_sequence_t>> hits,
 			      std::shared_ptr<KmerOtuStats> otu_stats)
 {
-    auto cb = [this, hits](sig_kmer_t &k) { hits->push_back(k); };
+    auto cb = [this, hits](hit_in_sequence_t k) { hits->push_back(k); };
     process_aa_seq(id, seq, calls, cb, otu_stats);
 }
 
 void KmerGuts::process_aa_seq(const std::string &idstr, const std::string &seqstr,
 			      std::shared_ptr<std::vector<KmerCall>> calls,
-			      std::function<void(sig_kmer_t &)> hit_cb,
+			      std::function<void(hit_in_sequence_t)> hit_cb,
 			      std::shared_ptr<KmerOtuStats> otu_stats)
 {
     const char *id = idstr.c_str();
@@ -759,7 +762,7 @@ void KmerGuts::process_aa_seq(const std::string &idstr, const std::string &seqst
 
 void KmerGuts::process_seq(const char *id,const char *data,
 			   std::shared_ptr<std::vector<KmerCall>> calls,
-			   std::function<void(sig_kmer_t &)> hit_cb,
+			   std::function<void(hit_in_sequence_t)> hit_cb,
 			   std::shared_ptr<KmerOtuStats> otu_stats)
 
 {
@@ -792,6 +795,18 @@ std::string KmerGuts::format_call(const KmerCall &c)
     oss << "CALL\t" << c.start << "\t" << c.end << "\t" << c.count;
     oss << "\t" << c.function_index << "\t" << kmersH->function_array[c.function_index];
     oss << "\t" << c.weighted_hits << "\n";
+    
+    return oss.str();
+}
+
+std::string KmerGuts::format_hit(const hit_in_sequence_t &h)
+{
+    std::ostringstream oss;
+
+    char dc[KMER_SIZE + 1];
+    decoded_kmer(h.hit.which_kmer, dc);
+
+    oss << "HIT\t" << h.offset << "\t" << dc << "\t" << h.hit.avg_from_end << "\t" << kmersH->function_array[h.hit.function_index] << "\t" << h.hit.function_wt << "\t" << h.hit.otu_index << "\n";
     
     return oss.str();
 }
