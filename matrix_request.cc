@@ -88,9 +88,8 @@ void MatrixRequest::on_data(boost::system::error_code err, size_t bytes)
 		    KmerPegMapping::encoded_id_t eid = mapping_->encode_id(id);
 		    
 		    matrix_proteins_[eid] = seq.size();
-		    // std::cout << id << ": " << seq << "\n";
-		    // std::cout << id << ": " << "\n";
-		    kguts->process_aa_seq(id.c_str(), seq.c_str(), seq.size(), 0,
+		    
+		    kguts->process_aa_seq(id, seq, 0,
 					  std::bind(&MatrixRequest::on_hit, this, eid, std::placeholders::_1),
 					  0);
 		}
@@ -127,9 +126,9 @@ int MatrixRequest::on_parsed_seq(const std::string &id, const std::string &seq)
     current_work_->push_back(ProteinSequence(id, seq));
 }
 
-void MatrixRequest::on_hit(KmerPegMapping::encoded_id_t id, KmerGuts::sig_kmer_t &kmer)
+void MatrixRequest::on_hit(KmerPegMapping::encoded_id_t id, KmerGuts::hit_in_sequence_t kmer)
 {
-    auto ki = mapping_->kmer_to_id_.find(kmer.which_kmer);
+    auto ki = mapping_->kmer_to_id_.find(kmer.hit.which_kmer);
     if (ki != mapping_->kmer_to_id_.end())
     {
         // char kmerstr[10];
@@ -156,7 +155,7 @@ void MatrixRequest::on_hit(KmerPegMapping::encoded_id_t id, KmerGuts::sig_kmer_t
     }
     else
     {
-	std::cerr << "no mapping for " << kmer.which_kmer << "\n";
+	std::cerr << "no mapping for " << kmer.hit.which_kmer << "\n";
     }
 }
 

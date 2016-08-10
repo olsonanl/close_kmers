@@ -1,5 +1,4 @@
 #include "query_request.h"
-
 #include <boost/bind.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/buffers_iterator.hpp>
@@ -90,6 +89,11 @@ void QueryRequest::on_data(boost::system::error_code err, size_t bytes)
 		    header_written_ = true;
 		}
 
+		int details = 0;
+		try {
+		    details = std::stoi(owner_->parameters()["details"]);
+		} catch (...) {}
+
 		for (auto x: *cur)
 		{
 		    auto id = x.first;
@@ -97,11 +101,27 @@ void QueryRequest::on_data(boost::system::error_code err, size_t bytes)
 		    
 		    auto calls = std::make_shared<std::vector<KmerCall> >();
 		    auto stats = std::make_shared<KmerOtuStats>();
-		    kguts->process_aa_seq(id.c_str(), seq.c_str(), seq.size(), calls, 0, stats);
+		    std::shared_ptr<std::vector<KmerGuts::hit_in_sequence_t> > hits = 0;
+		    if (details)
+		    {
+			hits = std::make_shared<std::vector<KmerGuts::hit_in_sequence_t> >();
+			kguts->process_aa_seq_hits(id, seq, calls, hits, stats);
+		    }
+		    else
+		    {
+			kguts->process_aa_seq(id, seq, calls, 0, stats);
+		    }
 		    os << "PROTEIN-ID\t" << id << "\t" << seq.size() << "\n";
 		    for (auto c: *calls)
 		    {
 			os << kguts->format_call(c);
+		    }
+		    if (details)
+		    {
+			for (auto h: *hits)
+			{
+			    os << kguts->format_hit(h);
+			}
 		    }
 		    os << kguts->format_otu_stats(x.first, x.second.size(), *stats);
 		}

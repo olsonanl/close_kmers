@@ -67,12 +67,12 @@ int KmerLookupClient2::on_parsed_seq(const std::string &id, const std::string &s
 
     if (on_hit_)
     {    
-	kguts_->process_aa_seq(id.c_str(), seq.c_str(), seq.size(), calls, 
+	kguts_->process_aa_seq(id, seq, calls, 
 			       std::bind(&KmerLookupClient2::on_hit, this, std::placeholders::_1), otu_stats);
     }
     else
     {
-	kguts_->process_aa_seq(id.c_str(), seq.c_str(), seq.size(), calls, 0, otu_stats);
+	kguts_->process_aa_seq(id, seq, calls, 0, otu_stats);
     }	
 
     if (on_call_ && !silent_)

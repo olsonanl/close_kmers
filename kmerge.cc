@@ -35,7 +35,12 @@ public:
 		exit(1);
 	    }
 	    strncpy(kmer_, k.c_str(), k.size());
+	    kmer_[k.size()] = 0;
 	}
+
+    Kmer(const Kmer &kmer) {
+	strncpy(kmer_, kmer.kmer_, 32);
+    }
 
     Kmer()
 	{
@@ -471,7 +476,7 @@ template <class KmerType, class ItemType>
 void KmerSet<KmerType, ItemType>::dump(std::ostream &stream)
 {
     for (auto ent: kmer_map_)
-    {
+    { 
 	stream << ent.first;
 	for (auto v: ent.second)
 	{

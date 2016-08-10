@@ -42,7 +42,11 @@ KmerPegMapping::KmerPegMapping() :
 
 void KmerPegMapping::reserve_mapping_space(size_t n)
 {
+    #ifdef USE_TBB
+    kmer_to_id_.rehash(n);
+    #else
     kmer_to_id_.reserve(n);
+    #endif
 }
 					 
 
@@ -158,8 +162,9 @@ void KmerPegMapping::load_compact_mapping_file(std::istream &kfile)
 
 void KmerPegMapping::add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long kmer)
 {
-    // kmer_to_id_[kmer].push_back(enc);
-
+    #ifdef USE_TBB
+    kmer_to_id_[kmer].push_back(enc);
+    #else
     auto it = kmer_to_id_.find(kmer);
 
     if (it == kmer_to_id_.end())
@@ -174,6 +179,7 @@ void KmerPegMapping::add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long
 	//std::cout << "reuse " << kmer << "\n";
 	it->second.push_back(enc);
     }
+    #endif
     kcount_++;
     if (kcount_ % 1000000 == 0)
 	std::cerr << kmer_to_id_.size() << " entries with " << kcount_ << " values load-factor " << kmer_to_id_.load_factor() << "\n";
@@ -266,7 +272,12 @@ void KmerPegMapping::load_families(const std::string &families_file)
        
     size_t size_estimate = fsize * lines / sample_size;
     std::cerr << "fsize=" << fsize << " line estimate=" << size_estimate << "\n";
+    
+    #ifdef USE_TBB
+    family_mapping_.rehash(size_estimate * 10);
+    #else
     family_mapping_.reserve(size_estimate * 10);
+    #endif
     
     while (std::getline(f, line))
     {

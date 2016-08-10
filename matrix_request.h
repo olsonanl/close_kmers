@@ -30,7 +30,7 @@ private:
 
     int on_parsed_seq(const std::string &id, const std::string &seq);
 
-    void on_hit(KmerPegMapping::encoded_id_t id, KmerGuts::sig_kmer_t &kmer);
+    void on_hit(KmerPegMapping::encoded_id_t id, KmerGuts::hit_in_sequence_t kmer);
     void on_data(boost::system::error_code err, size_t bytes);
 
     void process_results();

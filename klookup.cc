@@ -55,7 +55,7 @@ KmerLookupClient::KmerLookupClient(std::shared_ptr<KmerGuts> kguts,
 int KmerLookupClient::on_parsed_seq(const std::string &id, const std::string &seq)
 {
     // std::cout << "on parsed " << id << std::endl;
-    kguts_->process_aa_seq(id.c_str(), seq.c_str(), seq.size(), 0, std::bind(&KmerLookupClient::on_hit, this, std::placeholders::_1), 0);
+    kguts_->process_aa_seq(id, seq, 0, std::bind(&KmerLookupClient::on_hit, this, std::placeholders::_1), 0);
     // std::cout << "done\n";
 
     typedef std::pair<KmerPegMapping::encoded_id_t, unsigned int> data_t;

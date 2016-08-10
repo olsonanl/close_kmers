@@ -8,6 +8,12 @@
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 
+#include <unistd.h>
+
+#ifdef BLCR_SUPPORT
+#include "libcr.h"
+#endif
+
 #ifdef GPROFILER
 #include <gperftools/profiler.h>
 #endif
@@ -33,9 +39,10 @@ int main(int argc, char* argv[])
     std::string listen_port_file;
     std::string kmer_data;
     std::string peg_kmer_data;
-    std::string families_file;
     int n_kmer_threads;
-
+    bool daemonize;
+    std::string pid_file;
+    
     desc.add_options()
 	("help,h", "show this help message")
 	("n-kmer-threads", po::value<int>(&n_kmer_threads)->default_value(1), "number of kmer processing threads")
@@ -43,10 +50,13 @@ int main(int argc, char* argv[])
 	("peg-kmer-data", po::value<std::string>(&peg_kmer_data), "precomputed PEG/kmer data file")
 	("listen-port,l", po::value<std::string>(&listen_port)->required(), "port to listen on. 0 means to choose a random port")
 	("kmer-data-dir,d", po::value<std::string>(&kmer_data)->required(), "kmer data directory")
-	("families-file", po::value<std::string>(&families_file), "families file")
+	("families-file", po::value<std::string>(), "families file")
+	("families-nr", po::value<std::vector<std::string>>()->multitoken(), "families NR data")
 	("reserve-mapping", po::value<int>(), "Reserve this much space in global mapping table")
 	("no-populate-mmap", po::bool_switch(), "Don't populate mmap data at startup")
 	("debug-http", po::bool_switch(), "Debug HTTP protocol")
+	("daemonize", po::bool_switch(&daemonize), "Run the service in the background")
+	("pid-file", po::value<std::string>(&pid_file), "Write the process id to this file")
 	;
     po::positional_options_description pd;
     pd.add("listen-port", 1)
@@ -97,14 +107,54 @@ int main(int argc, char* argv[])
     }
     */
     
+    #ifdef BLCR_SUPPORT
+    // g_cr_client_id = cr_init();
+    #endif
+
+    if (daemonize)
+    {
+	pid_t child = fork();
+	if (child < 0)
+	{
+	    std::cerr << "fork failed: " << strerror(errno) << "\n";
+	    exit(1);
+	}
+	if (child > 0)
+	{
+	    if (!pid_file.empty())
+	    {
+		std::ofstream pf(pid_file);
+		pf << child << "\n";
+		pf.close();
+	    }
+	    exit(0);
+	}
+	pid_t sid = setsid();
+	if (sid < 0)
+	{
+	    std::cerr << "setsid failed: " << strerror(errno) << "\n";
+	    exit(1);
+	}
+    }
+    else if (!pid_file.empty())
+    {
+	std::ofstream pf(pid_file);
+	pf << getpid() << "\n";
+	pf.close();
+    }
+
     boost::asio::io_service io_service;
 
     std::shared_ptr<ThreadPool> tp = std::make_shared<ThreadPool>(kmer_data);
 
-    std::shared_ptr<KmerRequestServer> kserver = std::make_shared<KmerRequestServer>(io_service, listen_port, listen_port_file,
-										     tp);
+#ifdef USE_NUMA
+    // tp->numa_.bind_memory();
+#endif
 
     tp->start(n_kmer_threads);
+
+    std::shared_ptr<KmerRequestServer> kserver = std::make_shared<KmerRequestServer>(io_service, listen_port, listen_port_file,
+										     tp);
 
     kserver->startup();
 

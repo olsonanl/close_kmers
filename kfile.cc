@@ -33,7 +33,7 @@ int main(int argc, char **argv)
 		process_hit(kg, x);
 	    };
 
-	    kg.process_aa_seq(id.c_str(), seq.c_str(), seq.size(), calls, 0, otu_stats);
+	    kg.process_aa_seq(id, seq, calls, 0, otu_stats);
 
 	    std::cout << id << std::endl;
 	    for (auto x = calls->begin(); x != calls->end(); x++)

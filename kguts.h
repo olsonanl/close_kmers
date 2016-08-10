@@ -138,6 +138,8 @@ COMMAND LINE ARGUMENTS:
 #include <functional>
 #include <algorithm>
 
+#include "kmer_image.h"
+
 #define KMER_SIZE 8
 #define MAX_SEQ_LEN 500000000
 
@@ -149,7 +151,6 @@ const unsigned long long CORE = 20L*20L*20L*20L*20L*20L*20L;
 #endif
 
 #define MAX_ENCODED CORE*20L 
-#define VERSION 1
 
 #define MAX_HITS_PER_SEQ 40000
 
@@ -225,19 +226,14 @@ class KmerGuts
 {
 public:
 
-    typedef struct sig_kmer {
-	unsigned long long  which_kmer;
-	int  otu_index;
-	unsigned short  avg_from_end;
-	int  function_index;
-	float function_wt;
-    } sig_kmer_t;
+    typedef struct sig_kmer sig_kmer_t;
 
-    typedef struct kmer_memory_image {
-	unsigned long long num_sigs;
-	unsigned long long entry_size;
-	long long  version;
-    } kmer_memory_image_t;
+    struct hit_in_sequence_t {
+	sig_kmer_t hit;
+	unsigned int offset;
+
+    hit_in_sequence_t(sig_kmer_t &h, unsigned int o) : hit(h), offset(o) {}
+    };
 
     typedef struct kmer_handle {
 	sig_kmer_t *kmer_table;
@@ -295,8 +291,7 @@ public:
 
     kmer_handle_t *kmersH;
 
-    KmerGuts();
-    KmerGuts(const std::string &kmer_dir, kmer_memory_image_t *image = 0);
+    KmerGuts(const std::string &kmer_dir, std::shared_ptr<KmerImage> image);
 
     unsigned char to_amino_acid_off(char c);
     char comp(char c);
@@ -319,30 +314,33 @@ public:
     void gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq,
 		     unsigned char *pIseq,
 		     std::shared_ptr<std::vector<KmerCall>> calls,
-		     std::function<void(sig_kmer_t &)> hit_cb,
+		     std::function<void(hit_in_sequence_t)> hit_cb,
 		     std::shared_ptr<KmerOtuStats> otu_stats);
 	
     void process_seq(const char *id,const char *data,
 		     std::shared_ptr<std::vector<KmerCall>> calls,
-		     std::function<void(sig_kmer_t &)> hit_cb,
+		     std::function<void(hit_in_sequence_t)> hit_cb,
 		     std::shared_ptr<KmerOtuStats> otu_stats);
 	
-    void process_aa_seq(const char *id,const char *pseq,size_t ln,
+    void process_aa_seq(const std::string &id, const std::string &seq,
 			std::shared_ptr<std::vector<KmerCall>> calls,
-			std::function<void(sig_kmer_t &)> hit_cb,
+			std::function<void(hit_in_sequence_t)> hit_cb,
 			std::shared_ptr<KmerOtuStats> otu_stats);
 
-    void process_aa_seq_hits(const char *id,const char *pseq,size_t ln,
+    void process_aa_seq_hits(const std::string &id, const std::string &seq,
 			std::shared_ptr<std::vector<KmerCall>> calls,
-			std::shared_ptr<std::vector<sig_kmer_t>> hits,
+			std::shared_ptr<std::vector<hit_in_sequence_t>> hits,
 			std::shared_ptr<KmerOtuStats> otu_stats);
 
-    kmer_handle_t *init_kmers(const char *dataD, kmer_memory_image_t *image = 0);
-    static kmer_memory_image_t *map_image_file(const std::string &data_dir);
+    kmer_handle_t *init_kmers(const char *dataD);
+    static kmer_memory_image_t *map_image_file(const std::string &data_dir, size_t &image_size);
+
+    std::shared_ptr<KmerImage> image_;
 
     char *function_at_index(int i) { return kmersH->function_array[i]; }
 
     std::string format_call(const KmerCall &c);
+    std::string format_hit(const hit_in_sequence_t &h);
     std::string format_otu_stats(const std::string &id, int size, KmerOtuStats &otu_stats);
 };
 
