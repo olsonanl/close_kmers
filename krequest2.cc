@@ -255,6 +255,30 @@ void KmerRequest2::process_request()
 		    io_service_.stop();
 		});
 	}
+	else if (path_ == "/dump_mapping")
+	{
+	    auto xmap = mapping_map_->find("");
+	    auto map = xmap->second;
+
+	    for (auto it: map->kmer_to_id_)
+	    {
+	        char kmer[10];
+		KmerGuts::decoded_kmer(it.first, kmer);
+		std::cout << kmer << "\t";
+		//os << it.first << "\t";
+		for (auto elt: it.second)
+		{
+		    std::cout << " " << map->decode_id(elt);
+		    //std::cout << " " << elt;
+		}
+		std::cout << "\n";
+	    }
+	    for (auto it: map->family_mapping_)
+	    {
+		std::cout << it.first << "\t" << it.second.pgf << "\t" << it.second.plf << "\t" << it.second.function << "\n";
+	    }
+	    respond(200, "OK", "Mapping dumped\n", [this](){ });
+	}
 	else
 	{
 	    respond(404, "Not found", "path not found\n", [this](){ });

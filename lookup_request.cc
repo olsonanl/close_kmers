@@ -111,7 +111,7 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 		    
 		    hit_count_.clear();
 		    
-		    kguts->process_aa_seq(id.c_str(), seq.c_str(), id.size(), 0,
+		    kguts->process_aa_seq(id.c_str(), seq.c_str(), seq.size(), 0,
 					  std::bind(&LookupRequest::on_hit, this, std::placeholders::_1),
 					  0);
 
