@@ -660,7 +660,10 @@ void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq
     }
     while (p < bound) {
 	long long  where = lookup_hash_entry(kmersH->kmer_table,encodedK);
-	// std::cerr << (p - pIseq) << " '" << encodedK << "' '" << where << "'\n";
+	// std::cerr << p << " " << encodedK << " " << where << "\n";
+	//for (int i = 0; i < KMER_SIZE; i++)
+	//    std::cerr << prot_alpha[p[i]];
+	//std::cerr << " " << encodedK << " " << where << "\n";
 	if (where >= 0) {
 	    sig_kmer_t *kmers_hash_entry = &(kmersH->kmer_table[where]);
 	    int avg_off_end = kmers_hash_entry->avg_from_end;

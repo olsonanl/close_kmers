@@ -298,7 +298,7 @@ public:
     void rev_comp(const char *data,char *cdata);
     unsigned long long encoded_kmer(unsigned char *p);
     unsigned long long encoded_aa_kmer(char *p);
-    void decoded_kmer(unsigned long long encodedK,char *decoded);
+    static void decoded_kmer(unsigned long long encodedK,char *decoded);
     int dna_char(char c);
     void translate(const char *seq,int off,char *pseq, unsigned char *pIseq);
     char **load_indexed_ar(char *filename,int *sz);

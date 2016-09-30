@@ -219,7 +219,7 @@ KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string &genome
 std::string KmerPegMapping::decode_id(encoded_id_t id)
 {
     std::string g = id_to_genome_[id >> 17];
-    unsigned int peg = id & 0x7fff;
+    unsigned int peg = id & 0x1ffff;
     return "fig|" + g + ".peg." + std::to_string((long long) peg);
 }
 

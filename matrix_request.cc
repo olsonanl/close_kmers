@@ -21,7 +21,7 @@ MatrixRequest::MatrixRequest(std::shared_ptr<KmerRequest2> owner, std::shared_pt
 
 void MatrixRequest::run()
 {
-    // std::cerr << "ar run, len=" << content_length_ <<  " request_size=" << owner_->request().size() << "\n";
+    // std::cerr << "mat run, len=" << content_length_ <<  " request_size=" << owner_->request().size() << "\n";
 
     if (owner_->request().size() > 0)
     {
@@ -99,22 +99,18 @@ void MatrixRequest::on_data(boost::system::error_code err, size_t bytes)
 			 */
 			// std::cout << "post response in " << pthread_self() << "\n";
 
-			boost::asio::async_write(owner_->socket(), *sbuf,
-						 [this, err, sbuf](const boost::system::error_code &err2, const long unsigned int &bytes2){
-						     // std::cerr << "write done in " << pthread_self() << " err=" << err << " content_length=" << content_length_ <<"\n";
-						     if (err == boost::asio::error::eof || content_length_ == 0)
-						     {
-							 process_results();
-						     }
-						     else
-						     {
-							 boost::asio::async_read(owner_->socket(), owner_->request(),
-										 boost::asio::transfer_at_least(content_length_),
-										 boost::bind(&MatrixRequest::on_data, this,
-											     boost::asio::placeholders::error,
-											     boost::asio::placeholders::bytes_transferred));
-						     }
-						 });
+			if (err == boost::asio::error::eof || content_length_ == 0)
+			{
+			    process_results();
+			}
+			else
+			{
+			    boost::asio::async_read(owner_->socket(), owner_->request(),
+						    boost::asio::transfer_at_least(content_length_),
+						    boost::bind(&MatrixRequest::on_data, this,
+								boost::asio::placeholders::error,
+								boost::asio::placeholders::bytes_transferred));
+			}
 		    });
 	    });
     }
@@ -135,21 +131,31 @@ void MatrixRequest::on_hit(KmerPegMapping::encoded_id_t id, KmerGuts::hit_in_seq
     auto ki = mapping_->kmer_to_id_.find(kmer.hit.which_kmer);
     if (ki != mapping_->kmer_to_id_.end())
     {
-	// std::cout << "got mapping for " << kmer.hit.which_kmer << "\n";
+        // char kmerstr[10];
+	// KmerGuts::decoded_kmer(kmer.which_kmer, kmerstr);
+	// std::cout << "got mapping for " << kmerstr << "\n";
+	//std::cout << "got mapping for " << kmer.which_kmer << "\n";
 	for (auto eid: ki->second)
 	{
 	    // std::cout << "  " << eid << " " << mapping_->decode_id(eid) << "\n";
 	    
-	    if (eid != id && matrix_proteins_.find(eid) != matrix_proteins_.end())
+	    if (eid != id)
 	    {
-		// ystd::cout << "Add " << id << " " << mapping_->decode_id(id) << "\n";
-		distance_[std::make_pair(id, eid)]++;
-	    }
-	    else
-	    {
-		// std::cout << "drop " << id << " " << mapping_->decode_id(id) << "\n";
+		if (matrix_proteins_.find(eid) != matrix_proteins_.end())
+		{
+		    // std::cout << "    add " << eid << " " << mapping_->decode_id(eid) << "\n";
+		    distance_[std::make_pair(id, eid)]++;
+		}
+		else
+		{
+		    // std::cout << "    drop " << eid << " " << mapping_->decode_id(eid) << "\n";
+		}
 	    }
 	}
+    }
+    else
+    {
+	std::cerr << "no mapping for " << kmer.hit.which_kmer << "\n";
     }
 }
 
