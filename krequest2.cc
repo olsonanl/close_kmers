@@ -28,6 +28,7 @@ const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(
  * $6 = fragment
  */
 const boost::regex mapping_path_regex("^/mapping/([^/]+)(/(add|matrix|lookup))$");
+const boost::regex genus_loookup_path_regex("^/genus_lookup/([^/]+)$");
 
 KmerRequest2::KmerRequest2(std::shared_ptr<KmerRequestServer> server,
 			   boost::asio::io_service &io_service,
@@ -269,12 +270,51 @@ void KmerRequest2::process_request()
 
     if (request_type_ == "GET")
     {
+	boost::smatch match;
 	if (path_ == "/quit")
 	{
 	    respond(200, "OK", "OK, quitting\n", [this](){
 		    std::cerr << "stopping io service\n";
 		    io_service_.stop();
 		});
+	}
+	else if (path_ == "/version")
+	{
+	    std::ostringstream os;
+
+	    if (g_parameters->count("kmer-version"))
+	    {
+		os << "kmer\t" << (*g_parameters)["kmer-version"].as<std::string>() << "\n";
+	    }
+	    if (g_parameters->count("families-version"))
+	    {
+		os << "families\t" << (*g_parameters)["families-version"].as<std::string>() << "\n";
+	    }
+	    respond(200, "OK", os.str(), [this](){});
+
+	}
+	else if (boost::regex_match(path_, match, genus_loookup_path_regex))
+	{
+	    std::string genus = match[1];
+
+	    auto xmap = mapping_map_->find("");
+	    if (xmap == mapping_map_->end())
+	    {
+		respond(404, "Not Found", "genus not found\n", [this](){});
+	    }
+	    else
+	    {
+		auto root_mapping = xmap->second;
+		auto hit = root_mapping->genus_map_.find(genus);
+		if (hit == root_mapping->genus_map_.end())
+		{
+		    respond(404, "Not Found", "genus not found\n", [this](){});
+		}
+		else
+		{
+		    respond(200, "OK", hit->second + "\n", [this](){});
+		}
+	    }
 	}
 #ifdef BLCR_SUPPORT
 	else if (path_ == "/checkpoint")

@@ -6,6 +6,7 @@
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/filesystem/fstream.hpp>
 #include <boost/program_options.hpp>
 
 #include <unistd.h>
@@ -50,9 +51,12 @@ int main(int argc, char* argv[])
 	("peg-kmer-data", po::value<std::string>(&peg_kmer_data), "precomputed PEG/kmer data file")
 	("listen-port,l", po::value<std::string>(&listen_port)->required(), "port to listen on. 0 means to choose a random port")
 	("kmer-data-dir,d", po::value<std::string>(&kmer_data)->required(), "kmer data directory")
+	("kmer-version", po::value<std::string>(), "kmer data version string")
+	("families-genus-mapping", po::value<std::string>(), "genus name to taxid mapping file")
 	("families-file", po::value<std::string>(), "families file")
 	("families-nr", po::value<std::vector<std::string>>()->multitoken(), "families NR data")
-	("reserve-mapping", po::value<int>(), "Reserve this much space in global mapping table")
+	("families-version", po::value<std::string>(), "families data version string")
+	("reserve-mapping", po::value<unsigned long>(), "Reserve this much space in global mapping table")
 	("no-populate-mmap", po::bool_switch(), "Don't populate mmap data at startup")
 	("debug-http", po::bool_switch(), "Debug HTTP protocol")
 	("daemonize", po::bool_switch(&daemonize), "Run the service in the background")
@@ -69,7 +73,11 @@ int main(int argc, char* argv[])
 
     if (vm.count("help"))
     {
-	std::cout << desc << "\n";
+	std::cout << desc << "\n" <<
+	    "If the kmer data directory contains files families.dat and a\n" <<
+	    "directory families.nr it will be assumed that these files contain\n" <<
+	    "family data files and will be loaded at startup. A file VERSION\n" <<
+	    "will set the family version data to the contents of the first line of that file\n";
 	return 1;
     }
 
@@ -80,6 +88,85 @@ int main(int argc, char* argv[])
 	std::cerr << "Invalid command line: " << e.what() << "\n";
 	std::cerr << desc << "\n";
 	exit(1);
+    }
+
+    /*
+     * Check the kmer data directory for family and version files. If present,
+     * modify the parameters accordingly.
+     */
+    {
+	path fams_file(kmer_data);
+	fams_file /= "families.dat";
+	
+	path fams_nr(kmer_data);
+	fams_nr /= "families.nr";
+
+	path version(kmer_data);
+	version /= "VERSION";
+
+	path fams_version(kmer_data);
+	fams_version /= "families.version";
+
+	path fams_genus_map(kmer_data);
+	fams_genus_map /= "families.genus_map";
+
+	char *extra_options[500];
+	int extra_count = 0;
+	extra_options[extra_count++] = strdup(argv[0]);
+
+	std::string kversion("unknown"), fversion("unknown");
+
+	if (is_regular_file(version))
+	{
+	    ifstream v(version);
+	    std::getline(v, kversion);
+	    fversion = kversion;
+	}
+
+	if (is_regular_file(fams_version))
+	{
+	    ifstream v(fams_version);
+	    std::getline(v, fversion);
+	}
+
+	extra_options[extra_count++] = strdup("--kmer-version");
+	extra_options[extra_count++] = strdup(kversion.c_str());
+	
+	extra_options[extra_count++] = strdup("--families-version");
+	extra_options[extra_count++] = strdup(fversion.c_str());
+
+	if (is_regular_file(fams_genus_map))
+	{
+	    extra_options[extra_count++] = strdup("--families-genus-mapping");
+	    extra_options[extra_count++] = strdup(fams_genus_map.c_str());
+	}
+	
+	if (is_regular_file(fams_file))
+	{
+	    extra_options[extra_count++] = strdup("--families-file");
+	    extra_options[extra_count++] = strdup(fams_file.c_str());
+	}
+	if (is_directory(fams_nr))
+	{
+	    bool printed_arg = 0;
+	    for (auto dit : directory_iterator(fams_nr))
+	    {
+		if (!printed_arg)
+		{
+		    printed_arg = true;
+		    extra_options[extra_count++] = strdup("--families-nr");
+		}
+		extra_options[extra_count++] = strdup(dit.path().string().c_str());
+	    }
+	}
+	for (int i = 0; i < extra_count; i++)
+	    std::cerr << i << ": " << extra_options[i] << "\n";
+
+	po::store(po::command_line_parser(extra_count, extra_options).
+		  options(desc).positional(pd).run(), vm);
+
+	for (int i = 0; i < extra_count; i++)
+	    free(extra_options[i]);
     }
 
     /*

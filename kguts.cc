@@ -49,7 +49,7 @@ KmerGuts::KmerGuts(const std::string &data_dir, std::shared_ptr<KmerImage> image
     debug = 0;
     aa = 0;
     hits_only = 0;
-    size_hash = 1400303159;
+    size_hash = image->image()->num_sigs;
     write_mem_map = 0;
 
     num_hits = 0;
@@ -417,6 +417,7 @@ long long KmerGuts::find_empty_hash_entry(sig_kmer_t sig_kmers[],unsigned long l
 
 long long KmerGuts::lookup_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK) {
     long long  hash_entry = encodedK % size_hash;
+    // std::cerr << "lookup " << hash_entry << " " << size_hash << "\n";
     while ((sig_kmers[hash_entry].which_kmer != encodedK) && (sig_kmers[hash_entry].which_kmer <= MAX_ENCODED)) {
       hash_entry = (hash_entry+1)%size_hash;
 /*
@@ -535,6 +536,7 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
 	size_hash = image->num_sigs;
 	handle->num_sigs = size_hash;
 	handle->kmer_table = (sig_kmer_t *) (image + 1);
+	// std::cerr << "loaded; size_hash=" << size_hash << "\n";
     }
     return handle;
 }
@@ -658,7 +660,7 @@ void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq
     }
     while (p < bound) {
 	long long  where = lookup_hash_entry(kmersH->kmer_table,encodedK);
-	// std::cerr << p << " " << encodedK << " " << where << "\n";
+	// std::cerr << (p - pIseq) << " '" << encodedK << "' '" << where << "'\n";
 	if (where >= 0) {
 	    sig_kmer_t *kmers_hash_entry = &(kmersH->kmer_table[where]);
 	    int avg_off_end = kmers_hash_entry->avg_from_end;
@@ -755,6 +757,7 @@ void KmerGuts::process_aa_seq(const std::string &idstr, const std::string &seqst
     for (i=0; (i < ln); i++)
 	pIseq[i] = to_amino_acid_off(*(pseq+i));
 
+    // std::cerr << "'" << id << "' '" << pseq << "' " << ln << "\n";
     gather_hits(ln,'+',0,pseq,pIseq, calls, hit_cb, otu_stats);
     if (otu_stats)
 	otu_stats->finalize();

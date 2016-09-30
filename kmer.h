@@ -41,6 +41,12 @@ public:
 	: pgf(a), plf(b), function(c) {};
     };
 
+    /*
+     * Maps string genus name from family file
+     * to the taxon id used in PLF identifiers.
+     */
+    std::map<std::string, std::string> genus_map_;
+
 #ifdef USE_TBB
     typedef tbb::concurrent_vector<encoded_id_t> id_set;
     typedef tbb::concurrent_unordered_map<encoded_id_t, id_set> map_type_t;
@@ -60,6 +66,7 @@ public:
     id_to_genome_map_t id_to_genome_;
 
     family_map_t family_mapping_;
+    void load_genus_map(const std::string &genus_file);
     void load_families(const std::string &families_file);
 
     /*

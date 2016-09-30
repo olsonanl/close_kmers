@@ -223,6 +223,26 @@ std::string KmerPegMapping::decode_id(encoded_id_t id)
     return "fig|" + g + ".peg." + std::to_string((long long) peg);
 }
 
+void KmerPegMapping::load_genus_map(const std::string &genus_file)
+{
+    std::ifstream gf(genus_file);
+
+    if (gf.fail())
+    {
+	std::cerr << "Error opening gnus file " << genus_file << "\n";
+	exit(1);
+    }
+
+    std::string line;
+    while (std::getline(gf, line))
+    {
+	std::vector<std::string> cols;
+	boost::split(cols, line, boost::is_any_of("\t"));
+	genus_map_[cols[0]] = cols[1];
+    }
+}
+
+
 /*
  * Load a PATRIC families global-fams file and set up the global and local family attributes.
  *
@@ -278,7 +298,8 @@ void KmerPegMapping::load_families(const std::string &families_file)
     #else
     family_mapping_.reserve(size_estimate * 10);
     #endif
-    
+
+    std::map<std::string, bool> warned;
     while (std::getline(f, line))
     {
 	
@@ -288,7 +309,20 @@ void KmerPegMapping::load_families(const std::string &families_file)
 	std::string pgf("PGF_");
 	pgf += cols[0].substr(2);
 	std::string plf("PLF_");
-	plf += cols[7];
+	auto mapped_name = genus_map_.find(cols[7]);
+	if (mapped_name == genus_map_.end())
+	{
+	    if (!warned[cols[7]])
+	    {
+		std::cerr << "Cannot map " << cols[7] << "\n";
+		warned[cols[7]] = true;
+	    }
+	    plf += cols[7];
+	}
+	else
+	{
+	    plf += mapped_name->second;
+	}
 	plf += "_";
 	plf += zeros.substr(0, 8 - cols[8].size());
 	plf += cols[8];

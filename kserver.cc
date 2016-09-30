@@ -31,6 +31,12 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
     
     root_mapping->load_genome_map((*g_parameters)["kmer-data-dir"].as<std::string>() + "/genomes");
 
+    if (g_parameters->count("families-genus-mapping"))
+    {
+	std::string mapfile = (*g_parameters)["families-genus-mapping"].as<std::string>();
+	root_mapping->load_genus_map(mapfile);
+    }
+
     /*
      * If we are preloading a families file, start that off in the background
      * using the thread pool.
@@ -49,7 +55,7 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 
     if (g_parameters->count("reserve-mapping"))
     {
-	int count = (*g_parameters)["reserve-mapping"].as<int>();
+	unsigned long count = (*g_parameters)["reserve-mapping"].as<unsigned long>();
 	std::cerr << "Reserving " << count << " bytes in mapping table\n";
 	root_mapping->reserve_mapping_space(count);
     }

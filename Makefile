@@ -134,6 +134,9 @@ kser: kser.o kmer.o kserver.o kguts.o \
 	md5.o kmer_image.o numa.o
 	$(CXX) $(LDFLAGS) $(OPT) -o kser $^ $(LIBS)
 
+unique_prots: unique_prots.o kguts.o kmer_image.o fasta_parser.o
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+
 kfile: kfile.o kguts.o fasta_parser.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
