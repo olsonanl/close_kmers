@@ -66,13 +66,17 @@ public:
     KmerRequestServer(boost::asio::io_service& io_service,
 		      const std::string &port,
 		      const std::string &port_file,
-		      std::shared_ptr<ThreadPool> thread_pool);
+		      std::shared_ptr<ThreadPool> thread_pool,
+		      bool family_mode = false);
 
     void load_families_nr(const std::string &file);
     void startup();
     void deactivate(std::shared_ptr<KmerRequest2> x);
 
+    bool family_mode() { return family_mode_; }
+
 private:
+    bool family_mode_;
 
     void do_accept2();
     void on_accept2(boost::system::error_code ec, std::shared_ptr<KmerRequest2>);
@@ -104,10 +108,12 @@ class NRLoader
 {
 public:
     NRLoader(NRLoadState &load_state, const std::string &file, std::shared_ptr<KmerPegMapping> root_mapping,
-	     std::shared_ptr<ThreadPool> thread_pool, int n_files);
+	     std::shared_ptr<ThreadPool> thread_pool, int n_files, bool family_mode);
 
     void start();
     void load_families();
+
+    bool family_mode_;
 
     NRLoadState &load_state_;
     NRLoadState my_load_state_;

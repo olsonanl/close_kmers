@@ -120,6 +120,12 @@ x.o: x.cc kguts.h
 x: x.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
+tt: tt.o
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+
+mm: mm.o
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+
 tthr: tthr.o threadpool.o kguts.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 

@@ -12,7 +12,8 @@
 KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 				     const std::string &port,
 				     const std::string &port_file,
-				     std::shared_ptr<ThreadPool> thread_pool
+				     std::shared_ptr<ThreadPool> thread_pool,
+				     bool family_mode
     ) :
     io_service_(io_service),
     acceptor_(io_service_),
@@ -20,8 +21,11 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
     port_file_(port_file),
     signals_(io_service_),
     thread_pool_(thread_pool),
+    family_mode_(family_mode),
     load_state_("master")
 {
+    // For now hardcode family mode.
+    family_mode_ = true;
     
     mapping_map_ = std::make_shared<std::map<std::string, std::shared_ptr<KmerPegMapping> > >();
 
@@ -40,17 +44,31 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
     /*
      * If we are preloading a families file, start that off in the background
      * using the thread pool.
+     *
+     * If we are in family mode we cannot load in a thread as we need the family
+     * ID assignments for loading the NR that we're likely also prelaoding.
      */
+    
     if (g_parameters->count("families-file"))
     {
 	std::string ff = (*g_parameters)["families-file"].as<std::string>();
-	load_state_.pending_inc();
-	thread_pool_->post([this,root_mapping, ff]() {
-		std::cerr << "Loading families from " << ff << "...\n";
-		root_mapping->load_families(ff);
-		std::cerr << "Loading families from " << ff << "... done\n";
-		load_state_.pending_dec();
-	    });
+
+	if (family_mode_)
+	{
+	    std::cerr << "Loading (immediate) families from " << ff << "...\n";
+	    root_mapping->load_families(ff);
+	    std::cerr << "Loading families from " << ff << "... done\n";
+	}
+	else
+	{
+	    load_state_.pending_inc();
+	    thread_pool_->post([this,root_mapping, ff]() {
+		    std::cerr << "Loading families from " << ff << "...\n";
+		    root_mapping->load_families(ff);
+		    std::cerr << "Loading families from " << ff << "... done\n";
+		    load_state_.pending_dec();
+		});
+	}
     }
 
     if (g_parameters->count("reserve-mapping"))
@@ -68,7 +86,8 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 	for (auto file: files)
 	{
 	    load_state_.pending_inc();
-	    NRLoader *loader = new NRLoader(load_state_, file, root_mapping, thread_pool_, files.size());
+	    std::cerr << "Queue load NR file " << file << "\n";
+	    NRLoader *loader = new NRLoader(load_state_, file, root_mapping, thread_pool_, files.size(), family_mode_);
 	    active_loaders.push_back(loader);
 	    loader->start();
 	}
@@ -184,7 +203,7 @@ void KmerRequestServer::do_await_stop()
 NRLoader::NRLoader(NRLoadState &load_state, const std::string &file,
 		   std::shared_ptr<KmerPegMapping> root_mapping,
 		   std::shared_ptr<ThreadPool> thread_pool,
-		   int n_files) :
+		   int n_files, bool family_mode) :
     load_state_(load_state),
     file_(file),
     root_mapping_(root_mapping),
@@ -192,8 +211,10 @@ NRLoader::NRLoader(NRLoadState &load_state, const std::string &file,
     chunks_started_(0),
     chunks_finished_(0),
     my_load_state_(file),
-    n_files_(n_files)
+    n_files_(n_files),
+    family_mode_(family_mode)
 {
+    std::cerr << "Create NRLoader " << family_mode << "\n";
 }
 
 void NRLoader::start()
@@ -258,7 +279,14 @@ int NRLoader::on_parsed_seq(const std::string &id, const std::string &seq)
 
 void NRLoader::on_hit(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_id_t &enc_id)
 {
-    root_mapping_->add_mapping(enc_id, hit.hit.which_kmer);
+    if (family_mode_)
+    {
+	root_mapping_->add_fam_mapping(enc_id, hit.hit.which_kmer);
+    }
+    else
+    {
+	root_mapping_->add_mapping(enc_id, hit.hit.which_kmer);
+    }
 }
 
 void NRLoader::thread_load(std::shared_ptr<KmerRequestServer::seq_list_t> sent_work, int count)

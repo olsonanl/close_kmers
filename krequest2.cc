@@ -340,6 +340,18 @@ void KmerRequest2::process_request()
 	    }
 	    respond(200, "OK", "Mapping dumped\n", [this](){ });
 	}
+	else if (path_ == "/dump_sizes")
+	{
+	    std::ostringstream os;
+	    os << "memory dump\n";
+	    for (auto mapping_it : *mapping_map_)
+	    {
+		os << "Mapping '" << mapping_it.first << "':\n";
+		mapping_it.second->dump_sizes(os);
+	    }
+	    respond(200, "OK", os.str(), [this](){ });
+	    
+	}
 #ifdef BLCR_SUPPORT
 	else if (path_ == "/checkpoint")
 	{
@@ -448,7 +460,7 @@ void KmerRequest2::process_request()
 	}   
 	else if (action == "/lookup")
 	{
-	    auto lookup_request = std::make_shared<LookupRequest>(shared_from_this(), mapping, len);
+	    auto lookup_request = std::make_shared<LookupRequest>(shared_from_this(), mapping, server_->family_mode(), len);
 	    lookup_request->run();
 	    active_request_ = lookup_request;
 	}   

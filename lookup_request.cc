@@ -1,4 +1,5 @@
 #include "lookup_request.h"
+#include "kserver.h"
 
 #include <boost/bind.hpp>
 #include <boost/asio/buffer.hpp>
@@ -20,12 +21,14 @@ inline std::string make_string(boost::asio::streambuf& streambuf)
 	    buffers_end(streambuf.data())};
 }
 
-LookupRequest::LookupRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, int content_length, bool chunked) :
+LookupRequest::LookupRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping,
+			     bool family_mode, int content_length, bool chunked) :
     owner_(owner),
     mapping_(mapping),
     content_length_(content_length),
     parser_(std::bind(&LookupRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
     chunked_(chunked),
+    family_mode_(family_mode),
     header_written_(false)
 {
     kmer_hit_threshold_ = 3;
@@ -133,19 +136,30 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 			{
 			    auto eid = it.first;
 			    auto score = it.second;
-			
+
 			    if (score < kmer_hit_threshold_)
 				break;
-			    std::string peg = mapping_->decode_id(eid);
-			    os << peg << "\t" << score;
-			    // os << eid << "\t" << peg << "\t" << score;
 
-			    auto fhit = mapping_->family_mapping_.find(eid);
-			    if (fhit != mapping_->family_mapping_.end())
+			    if (family_mode_)
 			    {
-				os << "\t" << fhit->second.pgf << "\t" << fhit->second.plf << "\t" << fhit->second.function;
+				auto fent = mapping_->id_to_family_[eid];
+				std::string &pgf = fent.first;
+				std::string &plf = fent.second;
+				os << score << "\t" << pgf << "\t" << plf << "\n";
 			    }
-			    os << "\n";
+			    else
+			    {
+				std::string peg = mapping_->decode_id(eid);
+				os << peg << "\t" << score;
+				// os << eid << "\t" << peg << "\t" << score;
+				
+				auto fhit = mapping_->family_mapping_.find(eid);
+				if (fhit != mapping_->family_mapping_.end())
+				{
+				    os << "\t" << fhit->second.pgf << "\t" << fhit->second.plf << "\t" << fhit->second.function;
+				}
+				os << "\n";
+			    }
 			}
 			os << "//\n";
 
@@ -193,13 +207,34 @@ int LookupRequest::on_parsed_seq(const std::string &id, const std::string &seq)
 
 void LookupRequest::on_hit(KmerGuts::hit_in_sequence_t kmer)
 {
-    auto ki = mapping_->kmer_to_id_.find(kmer.hit.which_kmer);
-    if (ki != mapping_->kmer_to_id_.end())
+    if (family_mode_)
     {
-	// std::cout << "got mapping for " << kmer.hit.which_kmer << "\n";
-	for (auto eid: ki->second)
+	/*
+	 * In family mode we look at the mapping's kmer_to_family_id map
+	 * to determine the families that map to that kmer. We roll up the
+	 * hit counts for each of those families using the value in the map.
+	 */
+	auto ki = mapping_->kmer_to_family_id_.find(kmer.hit.which_kmer);
+	if (ki != mapping_->kmer_to_family_id_.end())
 	{
-	    hit_count_[eid]++;
+	    for (auto ent : ki->second)
+	    {
+		// auto fent = mapping_->id_to_family_[ent.first];
+		// std::cout << "got ent " << ent.first << " " << fent.second << " with count " << ent.second << "\n";
+		hit_count_[ent.first] += ent.second;
+	    }
+	}
+    }
+    else
+    {
+	auto ki = mapping_->kmer_to_id_.find(kmer.hit.which_kmer);
+	if (ki != mapping_->kmer_to_id_.end())
+	{
+	    // std::cout << "got mapping for " << kmer.hit.which_kmer << "\n";
+	    for (auto eid: ki->second)
+	    {
+		hit_count_[eid]++;
+	    }
 	}
     }
 }
