@@ -240,6 +240,8 @@ public:
 	unsigned long long num_sigs;
 	char **function_array;   /* indexed by fI */
 	char **otu_array;        /* OTU indexes point at a representation of multiple OTUs */
+	int function_count;
+	int otu_count;
     } kmer_handle_t;
 
 /* the following stuff was added to condense sets of hits to specific calls.
@@ -302,8 +304,8 @@ public:
     int dna_char(char c);
     void translate(const char *seq,int off,char *pseq, unsigned char *pIseq);
     char **load_indexed_ar(char *filename,int *sz);
-    char **load_functions(char *file);
-    char **load_otus(char *file);
+    char **load_functions(char *file, int *sz);
+    char **load_otus(char *file, int *sz);
     long long find_empty_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK);
     long long lookup_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK);
     kmer_memory_image_t *load_raw_kmers(char *file,unsigned long long num_entries, unsigned long long *alloc_sz);
@@ -337,11 +339,18 @@ public:
 
     std::shared_ptr<KmerImage> image_;
 
-    char *function_at_index(int i) { return kmersH->function_array[i]; }
+    const char *function_at_index(int i) {
+	if (i < 0 || i >= kmersH->function_count)
+	    return "INVALID_OFFSET";
+	else
+	    return kmersH->function_array[i];
+    }
 
     std::string format_call(const KmerCall &c);
     std::string format_hit(const hit_in_sequence_t &h);
     std::string format_otu_stats(const std::string &id, int size, KmerOtuStats &otu_stats);
+
+    void find_best_call(const std::vector<KmerCall> &calls, int &function_index, std::string &function, int &score);
 };
 
 

@@ -110,7 +110,6 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BOOST)/lib/libboost_program_options.a \
 	$(THREADLIB) \
 	$(PROFILER_LIB) \
-	$(KMC_LIB) \
 	$(BLCR_LIB) \
 	$(TBB_LIB) \
 	$(NUMA_LIBS)
@@ -118,6 +117,9 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 x.o: x.cc kguts.h
 
 x: x.o
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+
+tkguts: tkguts.o kguts.o kmer_image.o 
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 tt: tt.o
@@ -130,7 +132,7 @@ tthr: tthr.o threadpool.o kguts.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 kmerge: kmerge.o
-	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS) $(KMC_LIB)
 
 kc: kc.o kmer.o kserver.o krequest.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)

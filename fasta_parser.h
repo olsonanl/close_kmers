@@ -75,7 +75,9 @@ public:
 	    }
 	    else
 	    {
-		err = "Bad data character";
+		err = "Bad data character '";
+		err += c;
+		err += "'";
 	    }
 	    break;
 
@@ -99,7 +101,9 @@ public:
 	    }
 	    else
 	    {
-		err = "Bad data character";
+		err = "Bad id or data character '";
+		err += c;
+		err += "'";
 	    }
 	    break;
 	}

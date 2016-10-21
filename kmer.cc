@@ -204,40 +204,47 @@ void KmerPegMapping::add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long
     
 }
 
-void KmerPegMapping::add_fam_mapping(KmerPegMapping::encoded_id_t enc, encoded_kmer_t kmer)
+void KmerPegMapping::add_fam_mapping(KmerPegMapping::encoded_family_id_t fam_id, encoded_kmer_t kmer)
 {
 
     /*
      * use id_to_family_ to determine the family mapped to this id, and store
      * the kmer relationship.
      */
+    /* Moved to the calling code.
 
-    auto fam_id_iter = family_mapping_.find(enc);
-    if (fam_id_iter == family_mapping_.end())
+    auto fam_id_iter = peg_to_family_.find(enc);
+    if (fam_id_iter == peg_to_family_.end())
     {
 	std::string dec = decode_id(enc);
 	std::cout << "NO FAM FOR " << enc << " " << dec << "\n";
 	return;
     }
-    encoded_family_id_t fam_id = fam_id_iter->second.family_id;
-    
-    auto it = kmer_to_family_id_.find(kmer);
+    encoded_family_id_t fam_id = fam_id_iter->second;
+    */
 
-    if (it == kmer_to_family_id_.end())
-    {
-	auto n = kmer_to_family_id_.emplace(std::make_pair(kmer, family_counts_t()));
-	// std::cout << "Alloc new for " << kmer << "\n";
-	n.first->second[fam_id] = 1;
-    }
-    else
-    {
-	// std::cout << "reuse " << kmer << "\n";
-	it->second[fam_id]++;
-    }
-    kcount_++;
-    if (kcount_ % 1000000 == 0)
-	std::cerr << kmer_to_family_id_.size() << " entries with " << kcount_ << " values load-factor " << kmer_to_family_id_.load_factor() << "\n";
+    /*
+     * kmer_to_family_id_ is a tbb concurrent type so we don't have to lock for the
+     * emplace. However, to save memory the contained set is not a concurrent type,
+     * so we guard the family insert into the contained set with a mutex.
+     */
     
+    std::pair<family_map_type_t::iterator, bool> n = kmer_to_family_id_.emplace(std::make_pair(kmer, family_counts_t()));
+    boost::lock_guard<boost::mutex> guard(mtx_);
+
+    // for the unordered_set
+    //n.first->second.insert(fam_id);
+    // for the unordered_map with integral value
+    n.first->second[fam_id]++;
+    // for the unordered map with the pair<count,score> value
+    //auto it = n.first->find(fam_id);
+
+    if (n.second)
+    {
+	kcount_++;
+	if (kcount_ % 1000000 == 0)
+	    std::cerr << kmer_to_family_id_.size() << " entries with " << kcount_ << " values load-factor " << kmer_to_family_id_.load_factor() << "\n";
+    }
 }
 
 #if 1
@@ -386,9 +393,9 @@ void KmerPegMapping::load_families(const std::string &families_file)
     std::cerr << "fsize=" << fsize << " line estimate=" << size_estimate << "\n";
     
     #ifdef USE_TBB
-    family_mapping_.rehash(size_estimate * 10);
+    peg_to_family_.rehash(size_estimate * 10);
     #else
-    family_mapping_.reserve(size_estimate * 10);
+    peg_to_family_.reserve(size_estimate * 10);
     #endif
 
     unsigned int lineno = 0;
@@ -403,6 +410,7 @@ void KmerPegMapping::load_families(const std::string &families_file)
 	pgf += cols[0].substr(2);
 	std::string plf("PLF_");
 	auto mapped_name = genus_map_.find(cols[7]);
+	unsigned long genus_id = 0;
 	if (mapped_name == genus_map_.end())
 	{
 	    if (!warned[cols[7]])
@@ -415,6 +423,7 @@ void KmerPegMapping::load_families(const std::string &families_file)
 	else
 	{
 	    plf += mapped_name->second;
+	    genus_id = std::stoul(mapped_name->second);
 	}
 	plf += "_";
 	plf += zeros.substr(0, 8 - cols[8].size());
@@ -424,25 +433,59 @@ void KmerPegMapping::load_families(const std::string &families_file)
 	// assign unique key for for family
 	family_key_t fkey(pgf, plf);
 	encoded_family_id_t fam_id;
-	
-	auto fiter = family_to_id_.find(fkey);
-	if (fiter == family_to_id_.end())
+
+	unsigned long seqlen = std::stoul(cols[4]);
+	auto fiter = family_key_to_id_.find(fkey);
+	if (fiter == family_key_to_id_.end())
 	{
+	    /*
+	     * First occurrence of this family.
+	     * Assign an internal ID and initialize the full data entry.
+	     */
 	    boost::lock_guard<boost::mutex> guard(mtx_);
 
 	    fam_id = next_family_id_++;
-	    family_to_id_[fkey] = fam_id;
-	    id_to_family_[fam_id] = fkey;
+	    family_key_to_id_[fkey] = fam_id;
+
+	    family_data_.emplace(std::make_pair(fam_id, family_data_t { pgf, plf, genus_id, cols[5], fam_id, seqlen, 1 }));
+	    
 //	    std::cout << "assigned " << pgf << " " << plf << ": " << fam_id << "\n";
 //	    std::cout << fkey.first << " " << fkey.second << "\n";
 	}
 	else
 	{
 	    fam_id = fiter->second;
+	    auto famit = family_data_.find(fam_id);
+	    if (famit == family_data_.end())
+	    {
+		std::cerr << "Fail: no family data found for " << fam_id << "\n";
+		abort();
+	    }
+	    famit->second.total_size += seqlen;
+	    famit->second.count++;
 	}
 
 	// std::cerr << "fmap " << id << " " << fam_id << " " << plf << "\n";
-	family_mapping_.emplace(std::make_pair(id, family_data(pgf, plf, cols[5], fam_id)));
+
+	peg_to_family_[id] = fam_id;
+	    
+    }
+
+    /*
+     * debug.
+     */
+    if (0)
+    {
+	for (auto it1: family_key_to_id_)
+	{
+	    auto key = it1.first;
+	    auto fam = it1.second;
+	    std::cout << key.first << " " << key.second << " " << " " << fam << "\n";
+
+	    family_data_t &dat = family_data_[fam];
+	    std::cout << dat.pgf << " " << dat.plf << " " << dat.function << " " << dat.total_size << "\n";
+	}
+	
     }
 }
 

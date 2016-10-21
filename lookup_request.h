@@ -23,9 +23,14 @@ private:
     std::shared_ptr<KmerRequest2> owner_;
     FastaParser parser_;
     std::map<KmerPegMapping::encoded_id_t, unsigned int> hit_count_;
+    std::map<KmerPegMapping::encoded_id_t, unsigned int> hit_total_;
 
     int kmer_hit_threshold_;
     bool header_written_;
+    bool find_best_match_;
+    std::string target_genus_;
+    unsigned long target_genus_id_;
+    
 
     typedef std::vector<ProteinSequence> work_list_t;
     std::shared_ptr<work_list_t> current_work_;

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include "global.h"
+#include "kguts.h"
 
 KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 				     const std::string &port,
@@ -24,9 +25,6 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
     family_mode_(family_mode),
     load_state_("master")
 {
-    // For now hardcode family mode.
-    family_mode_ = true;
-    
     mapping_map_ = std::make_shared<std::map<std::string, std::shared_ptr<KmerPegMapping> > >();
 
     auto x = mapping_map_->insert(std::make_pair("", std::make_shared<KmerPegMapping>()));
@@ -47,6 +45,9 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
      *
      * If we are in family mode we cannot load in a thread as we need the family
      * ID assignments for loading the NR that we're likely also prelaoding.
+     *
+     * Legacy test: we have now defined family mode as what we're operating in
+     * when the families file has been specified.
      */
     
     if (g_parameters->count("families-file"))
@@ -228,7 +229,7 @@ void NRLoader::start()
 
 void NRLoader::load_families()
 {
-    // std::cerr << "Begin load of " << file_ << "\n";
+    std::cerr << "Begin load of " << file_ << "\n";
     cur_work_ = std::make_shared<KmerRequestServer::seq_list_t>();
 
     size_t fsize = boost::filesystem::file_size(file_);
@@ -237,6 +238,11 @@ void NRLoader::load_families()
     if (max_size_ < 1000000)
 	max_size_ = 1000000;
     cur_size_ = 0;
+
+    {
+	boost::lock_guard<boost::mutex> lock(dbg_mut_);
+	std::cerr << "tp size=" << thread_pool_->size() << " max_size_=" << max_size_ << "\n";
+    }
 
     FastaParser parser(std::bind(&NRLoader::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2));
 
@@ -251,13 +257,13 @@ void NRLoader::load_families()
 	cur_size_ = 0;
 
 	my_load_state_.pending_inc();
-	//std::cerr << "post final work of size " << sent_work->size() << "\n";
+	std::cerr << "post final work of size " << sent_work->size() << "\n";
 	thread_pool_->post(std::bind(&NRLoader::thread_load, this, sent_work, chunks_started_++));
     }
 
-    // std::cerr << file_ << " loader awaiting completion of tasks\n";
+    std::cerr << file_ << " loader awaiting completion of tasks\n";
     my_load_state_.pending_wait();
-    // std::cerr << file_ << " loader completed\n";
+    std::cerr << file_ << " loader completed\n";
 }
 
 int NRLoader::on_parsed_seq(const std::string &id, const std::string &seq)
@@ -271,13 +277,13 @@ int NRLoader::on_parsed_seq(const std::string &id, const std::string &seq)
 	cur_size_ = 0;
 
 	my_load_state_.pending_inc();
-	// std::cerr << file_ << " post work of size " << sent_work->size() << "\n";
+	std::cerr << file_ << " post work of size " << sent_work->size() << "\n";
 	thread_pool_->post(std::bind(&NRLoader::thread_load, this, sent_work, chunks_started_++));
     }
 
 }
 
-void NRLoader::on_hit(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_id_t &enc_id)
+void NRLoader::on_hit(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_id_t &enc_id, size_t seq_len)
 {
     if (family_mode_)
     {
@@ -287,6 +293,11 @@ void NRLoader::on_hit(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_i
     {
 	root_mapping_->add_mapping(enc_id, hit.hit.which_kmer);
     }
+}
+
+void NRLoader::on_hit_fam(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_family_id_t &enc_id, size_t seq_len)
+{
+    root_mapping_->add_fam_mapping(enc_id, hit.hit.which_kmer);
 }
 
 void NRLoader::thread_load(std::shared_ptr<KmerRequestServer::seq_list_t> sent_work, int count)
@@ -299,8 +310,25 @@ void NRLoader::thread_load(std::shared_ptr<KmerRequestServer::seq_list_t> sent_w
 	    std::string &seq = seq_entry.second;
 	    
 	    KmerPegMapping::encoded_id_t enc_id = root_mapping_->encode_id(id);
-	    
-	    auto hit_cb = std::bind(&NRLoader::on_hit, this, std::placeholders::_1, enc_id);
+
+	    std::function<void(KmerGuts::hit_in_sequence_t)> hit_cb;
+
+	    if (family_mode_)
+	    {
+		auto fam_id_iter = root_mapping_->peg_to_family_.find(enc_id);
+		if (fam_id_iter == root_mapping_->peg_to_family_.end())
+		{
+		    std::string dec = root_mapping_->decode_id(enc_id);
+		    std::cout << "NO FAM FOR " << enc_id << " " << dec << "\n";
+		    return;
+		}
+		KmerPegMapping::encoded_family_id_t fam_id = fam_id_iter->second;
+		hit_cb = std::bind(&NRLoader::on_hit_fam, this, std::placeholders::_1, fam_id, seq.length());
+	    }
+	    else
+	    {		   
+		hit_cb = std::bind(&NRLoader::on_hit, this, std::placeholders::_1, enc_id, seq.length());
+	    }
 
 	    kguts->process_aa_seq(id, seq, 0, hit_cb, 0);
 	}
@@ -316,7 +344,7 @@ void NRLoader::thread_load(std::shared_ptr<KmerRequestServer::seq_list_t> sent_w
     {
 	boost::lock_guard<boost::mutex> lock(dbg_mut_);
 	chunks_finished_++;
-// 	std::cerr << file_ << " finish item " << count << " chunks_finished=" << chunks_finished_ << " chunks_started=" << chunks_started_ << "\n";
+ 	std::cerr << file_ << " finish item " << count << " chunks_finished=" << chunks_finished_ << " chunks_started=" << chunks_started_ << "\n";
     }
     my_load_state_.pending_dec();
 }

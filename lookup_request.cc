@@ -1,6 +1,7 @@
 #include "lookup_request.h"
 #include "kserver.h"
 
+#include <string>
 #include <boost/bind.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/buffers_iterator.hpp>
@@ -29,14 +30,28 @@ LookupRequest::LookupRequest(std::shared_ptr<KmerRequest2> owner, std::shared_pt
     parser_(std::bind(&LookupRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
     chunked_(chunked),
     family_mode_(family_mode),
-    header_written_(false)
+    header_written_(false),
+    find_best_match_(false),
+    target_genus_(owner->parameters()["target_genus"]),
+    target_genus_id_(0)
 {
     kmer_hit_threshold_ = 3;
     try {
 	kmer_hit_threshold_ = std::stoi(owner->parameters()["kmer_hit_threhsold"]);
-    } catch (const std::invalid_argument& ia)
-    {
-    }
+    } catch (const std::invalid_argument& ia) {}
+    try {
+	find_best_match_ = std::stoi(owner->parameters()["find_best_match"]);
+    } catch (const std::invalid_argument& ia) {}
+
+    try {
+	std::string tg(mapping_->lookup_genus(target_genus_));
+	if (!tg.empty())
+	{
+	    target_genus_id_ = std::stoul(tg);
+	}
+    } catch (const std::invalid_argument& ia) {}
+
+    // std::cerr << "created LookupRequest kmer_hit_threhsold=" << kmer_hit_threshold_ << " find_best_match=" << find_best_match_ << " target_genus=" << target_genus_ << " target_genus_id_=" << target_genus_id_ << "\n";
 }
 
 void LookupRequest::run()
@@ -114,54 +129,171 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 			auto seq = work_item.seq();
 		    
 			hit_count_.clear();
+			hit_total_.clear();
+
+			/*
+			 * We accumulate potential function calls if we are going to attempt
+			 * to return best family match.
+			 */
+			typedef std::vector<KmerCall> call_vector_t;
+			std::shared_ptr<call_vector_t> calls = 0;
+			if (find_best_match_ && family_mode_)
+			    calls = std::make_shared<call_vector_t>();
 
 			// std::cerr << "Lookup " << id << " " << seq << "\n";
-			kguts->process_aa_seq(id, seq, 0,
+			kguts->process_aa_seq(id, seq, calls,
 					      std::bind(&LookupRequest::on_hit, this, std::placeholders::_1),
 					      0);
 
+			/*
+			 * Process results for this sequence.
+			 *
+			 * Our putative family matches have been collected into hit_count and hit_total;
+			 * these are maps from either encoded family id (if we are in family mode)
+			 * or protein id (if we are not in family mode).
+			 *
+			 * If we are in find_best_match mode, we determine the called function
+			 * for this protein using KmerGuts::find_best_call(). We hereby declare that
+			 * find_best_match is only respected in family mode.
+			 *
+			 * We need to find the best match for both global and local families. For the
+			 * local family match we must have been provided a genus name in the query
+			 * via the "target_genus" parameter.
+			 *
+			 * Since the family results we get are pgf/plf pairs, in order to vote on the
+			 * best family we must accumulate counts for the pgfs. We can select the best
+			 * plf by choosing the plf with the highest score that matches the target genus.
+			 *
+			 * This requires one scan over the matched families, plus overhead for maintaining
+			 * the pgf->score mapping plus a scan over pgfs to determine the best value.
+			 *
+			 * If we are not in find_best_match mode, we will return all potential family
+			 * matches, sorted by score. We do this by converting the hit count map into
+			 * a vector and sorting the vector via the less_second operator (element.second
+			 * on the map entries is the count value).
+			 *
+			 */
 
-			typedef std::pair<KmerPegMapping::encoded_id_t, unsigned int> data_t;
-
-			std::vector<data_t> vec;
-			for (auto it: hit_count_)
+			if (find_best_match_ && family_mode_)
 			{
-			    vec.push_back(it);
-			}
+			    int best_call_fi, best_call_score;
+			    std::string best_call_function;
+			    kguts->find_best_call(*calls, best_call_fi, best_call_function, best_call_score);
+			    // std::cout << "Best call for " << id << ": " << best_call_fi << " " << best_call_function << " " << best_call_score << "\n";
 
-			std::sort(vec.begin(), vec.end(), less_second<data_t>()); 
+			    /*
+			     * If kmers don't find a suitable function, assume hypothetical protein and
+			     * associate with the closest hypothetical protein family.
+			     *
+			     * We can distinguish the family calls that did not have associated kmer
+			     * calls because they will have a zero score.
+			     */
 
-			os << id << "\n";
-			for (auto it: vec)
-			{
-			    auto eid = it.first;
-			    auto score = it.second;
+			    if (best_call_function.empty())
+				best_call_function = "hypothetical protein";
 
-			    if (score < kmer_hit_threshold_)
-				break;
-
-			    if (family_mode_)
+			    struct top_score
 			    {
-				auto fent = mapping_->id_to_family_[eid];
-				std::string &pgf = fent.first;
-				std::string &plf = fent.second;
-				os << score << "\t" << pgf << "\t" << plf << "\n";
-			    }
-			    else
+				unsigned int score;
+				std::string fam;
+				//KmerPegMapping::family_id_to_family_map_t::iterator entry;
+			    };
+
+			    top_score best_lf({score: 0 }); // entry: mapping_->family_data_.end()});
+			    top_score best_gf({score: 0 }); // entry: mapping_->family_data_.end()});
+
+			    std::unordered_map<std::string, unsigned int> pgf_rollup;
+			    
+			    for (auto hit_ent: hit_count_)
 			    {
-				std::string peg = mapping_->decode_id(eid);
-				os << peg << "\t" << score;
-				// os << eid << "\t" << peg << "\t" << score;
-				
-				auto fhit = mapping_->family_mapping_.find(eid);
-				if (fhit != mapping_->family_mapping_.end())
+				KmerPegMapping::encoded_id_t eid = hit_ent.first;
+				unsigned int score = hit_ent.second;
+				if (score < kmer_hit_threshold_)
+				    continue;
+				KmerPegMapping::family_id_to_family_map_t::iterator fent = mapping_->family_data_.find(eid);
+				if (fent == mapping_->family_data_.end())
+				    continue;
+
+				const KmerPegMapping::family_data_t &fam_data = fent->second;
+				if (fam_data.function != best_call_function)
+				    continue;
+
+				pgf_rollup[fam_data.pgf] += score;
+
+				// std::cerr << score << " " << best_lf.score << " " << fam_data.genus_id << " " << target_genus_id_ << "\n";
+				if (score > best_lf.score && fam_data.genus_id == target_genus_id_)
 				{
-				    os << "\t" << fhit->second.pgf << "\t" << fhit->second.plf << "\t" << fhit->second.function;
-				}
-				os << "\n";
+				    best_lf.score = score;
+				    best_lf.fam = fam_data.plf;
+				}				    
+
 			    }
+			    for (auto pgf_ent: pgf_rollup)
+			    {
+				const std::string &pgf = pgf_ent.first;
+				const unsigned int &score = pgf_ent.second;
+
+				if (score > best_gf.score)
+				{
+				    best_gf.score = score;
+				    best_gf.fam = pgf;
+				}
+
+			    }
+				
+			    /*
+			     * We have found our best scores. Write output.
+			     */
+			    os << id << "\t" << best_gf.fam << "\t" << best_gf.score << "\t" << best_lf.fam << "\t" << best_lf.score << "\t" << best_call_function << "\t" << best_call_score << "\n";
 			}
-			os << "//\n";
+			else
+			{
+			    typedef std::pair<KmerPegMapping::encoded_id_t, unsigned int> data_t;
+			    
+			    std::vector<data_t> vec;
+			    for (auto it: hit_count_)
+			    {
+				vec.push_back(it);
+			    }
+			    
+			    std::sort(vec.begin(), vec.end(), less_second<data_t>()); 
+			    
+			    os << id << "\n";
+			    for (auto it: vec)
+			    {
+				auto eid = it.first;
+				auto score = it.second;
+				
+				if (score < kmer_hit_threshold_)
+				    break;
+				
+				if (family_mode_)
+				{
+				    /*
+				     * To report we map the id back to its family and report data from there.
+				     */
+				    unsigned int total = hit_total_[eid];
+				    auto fent = mapping_->family_data_[eid];
+				    float scaled = (float) score / (float) fent.total_size;
+				    os << score << "\t" << total << "\t" << fent.pgf << "\t" << fent.plf << "\t" << fent.total_size << "\t" << fent.count << "\t" << scaled << "\t" << fent.function << "\n";
+				}
+				else
+				{
+				    std::string peg = mapping_->decode_id(eid);
+				    os << peg << "\t" << score;
+				    // os << eid << "\t" << peg << "\t" << score;
+				    
+				    auto fhit = mapping_->peg_to_family_.find(eid);
+				    if (fhit != mapping_->peg_to_family_.end())
+				    {
+					auto fam = mapping_->family_data_[fhit->second];
+					os << "\t" << fam.pgf << "\t" << fam.plf << "\t" << fam.function;
+				    }
+				    os << "\n";
+				}
+			    }
+			    os << "//\n";
+			}
 
 		    }
 		    os.flush();
@@ -214,7 +346,7 @@ void LookupRequest::on_hit(KmerGuts::hit_in_sequence_t kmer)
 	 * to determine the families that map to that kmer. We roll up the
 	 * hit counts for each of those families using the value in the map.
 	 */
-	auto ki = mapping_->kmer_to_family_id_.find(kmer.hit.which_kmer);
+	KmerPegMapping::family_map_type_t::iterator ki = mapping_->kmer_to_family_id_.find(kmer.hit.which_kmer);
 	if (ki != mapping_->kmer_to_family_id_.end())
 	{
 	    for (auto ent : ki->second)
@@ -222,6 +354,7 @@ void LookupRequest::on_hit(KmerGuts::hit_in_sequence_t kmer)
 		// auto fent = mapping_->id_to_family_[ent.first];
 		// std::cout << "got ent " << ent.first << " " << fent.second << " with count " << ent.second << "\n";
 		hit_count_[ent.first] += ent.second;
+		hit_total_[ent.first]++;
 	    }
 	}
     }

@@ -40,12 +40,14 @@ int main(int argc, char* argv[])
     std::string listen_port_file;
     std::string kmer_data;
     std::string peg_kmer_data;
+    int n_load_threads;
     int n_kmer_threads;
     bool daemonize;
     std::string pid_file;
     
     desc.add_options()
 	("help,h", "show this help message")
+	("n-load-threads", po::value<int>(&n_load_threads)->default_value(1), "number of NR load threads")
 	("n-kmer-threads", po::value<int>(&n_kmer_threads)->default_value(1), "number of kmer processing threads")
 	("listen-port-file", po::value<std::string>(&listen_port_file)->default_value("/dev/null"), "save the listen port to this file")
 	("peg-kmer-data", po::value<std::string>(&peg_kmer_data), "precomputed PEG/kmer data file")
@@ -151,12 +153,15 @@ int main(int argc, char* argv[])
 	    bool printed_arg = 0;
 	    for (auto dit : directory_iterator(fams_nr))
 	    {
-		if (!printed_arg)
+		if (is_regular_file(dit.path()))
 		{
-		    printed_arg = true;
-		    extra_options[extra_count++] = strdup("--families-nr");
+		    if (!printed_arg)
+		    {
+			printed_arg = true;
+			extra_options[extra_count++] = strdup("--families-nr");
+		    }
+		    extra_options[extra_count++] = strdup(dit.path().string().c_str());
 		}
-		extra_options[extra_count++] = strdup(dit.path().string().c_str());
 	    }
 	}
 	for (int i = 0; i < extra_count; i++)
@@ -238,11 +243,19 @@ int main(int argc, char* argv[])
     // tp->numa_.bind_memory();
 #endif
 
-    tp->start(n_kmer_threads);
+    tp->start(n_load_threads);
 
+    bool family_mode = g_parameters->count("families-file");
     std::shared_ptr<KmerRequestServer> kserver = std::make_shared<KmerRequestServer>(io_service, listen_port, listen_port_file,
-										     tp);
+										     tp, family_mode);
 
+
+    int additional_threads = n_kmer_threads - n_load_threads;
+    if (additional_threads > 0)
+    {
+	std::cerr << "Starting " << additional_threads << " additional threads\n";
+	tp->add_threads(additional_threads);
+    }
     kserver->startup();
 
     #ifdef GPROFILER

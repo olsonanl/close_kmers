@@ -290,6 +290,7 @@ void KmerRequest2::process_request()
 	    {
 		os << "families\t" << (*g_parameters)["families-version"].as<std::string>() << "\n";
 	    }
+	    os << "family-mode\t" << (server_->family_mode() ? "1" : "0") << "\n";
 	    respond(200, "OK", os.str(), [this](){});
 
 	}
@@ -334,10 +335,13 @@ void KmerRequest2::process_request()
 		}
 		std::cout << "\n";
 	    }
+
+	    /* need to go back and fix; this is debugging code anyway
 	    for (auto it: map->family_mapping_)
 	    {
 		std::cout << it.first << "\t" << it.second.pgf << "\t" << it.second.plf << "\t" << it.second.function << "\n";
 	    }
+	    */
 	    respond(200, "OK", "Mapping dumped\n", [this](){ });
 	}
 	else if (path_ == "/dump_sizes")
