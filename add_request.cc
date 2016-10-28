@@ -14,11 +14,12 @@ inline std::string make_string(boost::asio::streambuf& streambuf)
 }
 
 AddRequest::AddRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, int content_length, bool chunked) :
-    owner_(owner),
+    silent_(0),
     mapping_(mapping),
-    parser_(std::bind(&AddRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
     content_length_(content_length),
-    chunked_(chunked), silent_(0)
+    chunked_(chunked), 
+    owner_(owner),
+    parser_(std::bind(&AddRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2))
 {
     silent_ = 0;
     try {
@@ -218,4 +219,5 @@ int AddRequest::on_parsed_seq(const std::string &id, const std::string &seq)
     current_work_->push_back(std::make_pair(id, seq));
     // std::cerr << "seq: " << id << "\n";
     // std::cerr << seq << "\n";
+    return 0;
 }

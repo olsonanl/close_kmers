@@ -11,11 +11,11 @@ inline std::string make_string(boost::asio::streambuf& streambuf)
 }
 
 MatrixRequest::MatrixRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, int content_length, bool chunked) :
-    owner_(owner),
     mapping_(mapping),
     content_length_(content_length),
-    parser_(std::bind(&MatrixRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
-    chunked_(chunked)
+    chunked_(chunked),
+    owner_(owner),
+    parser_(std::bind(&MatrixRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2))
 {
 }
 
@@ -124,6 +124,7 @@ void MatrixRequest::on_data(boost::system::error_code err, size_t bytes)
 int MatrixRequest::on_parsed_seq(const std::string &id, const std::string &seq)
 {
     current_work_->push_back(ProteinSequence(id, seq));
+    return 0;
 }
 
 void MatrixRequest::on_hit(KmerPegMapping::encoded_id_t id, KmerGuts::hit_in_sequence_t kmer)

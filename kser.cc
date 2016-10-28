@@ -8,6 +8,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 #include <boost/program_options.hpp>
+#include <chrono>
 
 #include <unistd.h>
 
@@ -44,6 +45,7 @@ int main(int argc, char* argv[])
     int n_kmer_threads;
     bool daemonize;
     std::string pid_file;
+    std::string kmer_family_distribution_file;
     
     desc.add_options()
 	("help,h", "show this help message")
@@ -58,6 +60,7 @@ int main(int argc, char* argv[])
 	("families-file", po::value<std::string>(), "families file")
 	("families-nr", po::value<std::vector<std::string>>()->multitoken(), "families NR data")
 	("families-version", po::value<std::string>(), "families data version string")
+	("kmer-family-distribution-file", po::value<std::string>(&kmer_family_distribution_file), "kmer family distribution logfile")
 	("reserve-mapping", po::value<unsigned long>(), "Reserve this much space in global mapping table")
 	("no-populate-mmap", po::bool_switch(), "Don't populate mmap data at startup")
 	("debug-http", po::bool_switch(), "Debug HTTP protocol")
@@ -235,6 +238,12 @@ int main(int argc, char* argv[])
 	pf.close();
     }
 
+    std::ofstream kmer_family_distribution_stream;
+    if (!kmer_family_distribution_file.empty())
+    {
+	kmer_family_distribution_stream.open(kmer_family_distribution_file);
+    }
+
     boost::asio::io_service io_service;
 
     std::shared_ptr<ThreadPool> tp = std::make_shared<ThreadPool>(kmer_data);
@@ -246,9 +255,25 @@ int main(int argc, char* argv[])
     tp->start(n_load_threads);
 
     bool family_mode = g_parameters->count("families-file");
+
+    std::chrono::time_point<std::chrono::high_resolution_clock> start, end, end2;
+    start = std::chrono::high_resolution_clock::now();
     std::shared_ptr<KmerRequestServer> kserver = std::make_shared<KmerRequestServer>(io_service, listen_port, listen_port_file,
 										     tp, family_mode);
+    end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end - start;
+    std::cerr << "family load time " << elapsed_seconds.count() << "\n";
 
+    if (!kmer_family_distribution_file.empty())
+    {
+	std::cerr << "write distribution to " << kmer_family_distribution_file << "\n";
+	kserver->root_mapping()->write_kmer_distribution(kmer_family_distribution_stream);
+	kmer_family_distribution_stream.close();
+
+	end2 = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsed_seconds = end2 - end;
+	std::cerr << "distribution write time " << elapsed_seconds.count() << "\n";
+    }
 
     int additional_threads = n_kmer_threads - n_load_threads;
     if (additional_threads > 0)
@@ -259,14 +284,14 @@ int main(int argc, char* argv[])
     kserver->startup();
 
     #ifdef GPROFILER
-    std::cout << "profiler enable\n";
+    std::cerr << "profiler enable\n";
     ProfilerStart("prof.out");
     #endif
     io_service.run();
 
     #ifdef GPROFILER
     ProfilerStop();
-    std::cout << "profiler disable\n";
+    std::cerr << "profiler disable\n";
     #endif
 
     return 0;

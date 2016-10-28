@@ -94,8 +94,8 @@ BLCR_CFLAGS = -DBLCR_SUPPORT -I$(BLCR_DIR)/include
 BLCR_LIB = -L$(BLCR_DIR)/lib -lcr
 endif
 
-CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) $(BLCR_CFLAGS) $(TBB_CFLAGS) $(NUMA_CFLAGS)
-CFLAGS = $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC)
+CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) $(BLCR_CFLAGS) $(TBB_CFLAGS) $(NUMA_CFLAGS) -Wconversion -Wall -Werror
+CFLAGS = $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) -Wconversion -Wall
 
 # LDFLAGS  = -static
 LDFLAGS = $(TBB_LDFLAGS) $(CXX_LDFLAGS)
@@ -120,6 +120,9 @@ x: x.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 tkguts: tkguts.o kguts.o kmer_image.o 
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+
+parse_fasta: parse_fasta.o fasta_parser.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 tt: tt.o

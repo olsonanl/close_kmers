@@ -21,7 +21,7 @@ public:
     void add_threads(int n_threads);
     void stop();
 
-    int size() const { return thread_pool_.size(); }
+    size_t size() const { return thread_pool_.size(); }
 
     template <typename CompletionHandler>
 	BOOST_ASIO_INITFN_RESULT_TYPE(CompletionHandler, void ())

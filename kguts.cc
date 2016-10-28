@@ -32,14 +32,14 @@ static const  char prot_alpha[20] = {
 };
 
 KmerGuts::KmerGuts(const std::string &data_dir, std::shared_ptr<KmerImage> image) :
-    image_(image),
     param_map_(
 	{
 	    { "order_constraint", order_constraint },
 	    { "min_hits", min_hits },
 	    { "min_weighted_hits", min_weighted_hits },
 	    { "max_gap", max_gap }
-	})
+	}),
+    image_(image)
 {
     kmersH = init_kmers(data_dir.c_str());
     
@@ -257,13 +257,13 @@ char KmerGuts::comp(char c)
 
 void KmerGuts::rev_comp(const char *data,char *cdata) {
 
-  int n = strlen(data);
-  const char *p  = data + (n-1);
-  char *pc = cdata;
-  while (n--) {
-    *(pc++) = compl(*(p--));
-  }
-  *pc = 0;
+    size_t n = strlen(data);
+    const char *p  = data + (n-1);
+    char *pc = cdata;
+    while (n--) {
+	*(pc++) = (char) compl(*(p--));
+    }
+    *pc = 0;
 }
 
 unsigned long long KmerGuts::encoded_kmer(unsigned char *p) {
@@ -286,13 +286,13 @@ unsigned long long KmerGuts::encoded_kmer(unsigned char *p) {
 
 unsigned long long KmerGuts::encoded_aa_kmer(char *p)
 {
-  unsigned char aa_off[KMER_SIZE];
-  int j;
-  for (j=0; (j < KMER_SIZE); j++) {
-    int prot_c = *(p+j);
-    aa_off[j] = to_amino_acid_off(prot_c);
-  }
-  return encoded_kmer(aa_off);
+    unsigned char aa_off[KMER_SIZE];
+    int j;
+    for (j=0; (j < KMER_SIZE); j++) {
+	char prot_c = *(p+j);
+	aa_off[j] = to_amino_acid_off(prot_c);
+    }
+    return encoded_kmer(aa_off);
 }
 
 void KmerGuts::decoded_kmer(unsigned long long encodedK,char *decoded) {
@@ -337,8 +337,8 @@ int KmerGuts::dna_char(char c)
 
 void KmerGuts::translate(const char *seq,int off,char *pseq, unsigned char *pIseq) {
 
-  int i;
-  int max = strlen(seq) - 3;
+    size_t i;
+  size_t max = strlen(seq) - 3;
   char *p = pseq;
   unsigned char *pI = pIseq;
   for (i=off; (i <= max); ) {
@@ -359,7 +359,7 @@ void KmerGuts::translate(const char *seq,int off,char *pseq, unsigned char *pIse
   *p = 0;
   *pI = 21;
   if (debug >= 3) {
-    fprintf(stderr,"len-seq=%d max=%d p=%ld\n",(int) strlen(seq),max,p-pseq);
+    fprintf(stderr,"len-seq=%d max=%lu p=%ld\n",(int) strlen(seq),max,p-pseq);
   }
 }
 
@@ -460,12 +460,12 @@ kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long long num_
     sig_kmers[i].which_kmer = MAX_ENCODED + 1;
 
   char kmer_string[KMER_SIZE+1];
-  int end_off;
+  unsigned short end_off;
   int fI;
   float f_wt;
   int oI;
   long long loaded = 0;
-  while (fscanf(ifp,"%s\t%d\t%d\t%f\t%d",
+  while (fscanf(ifp,"%s\t%hu\t%d\t%f\t%d",
 		kmer_string,&end_off,&fI,&f_wt,&oI) >= 4) {
     unsigned long long encodedK = encoded_aa_kmer(kmer_string);
     long long hash_entry = find_empty_hash_entry(sig_kmers,encodedK);
@@ -505,13 +505,14 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
      strcat(fileM,"/kmer.table.mem_map");
 
      if (write_mem_map) {
-	 unsigned long long sz, table_size;
+	 // unsigned long long sz, table_size;
 	 strcpy(file,dataD);
 	 strcat(file,"/final.kmers");
 
 	 unsigned long long image_size;
 
 	 image = load_raw_kmers(file, size_hash, &image_size);
+
 
 	 handle->kmer_table = (sig_kmer_t *) (image + 1);
 	 handle->num_sigs   = image->num_sigs;
@@ -524,11 +525,15 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
 	 fwrite(image, image_size, 1, fp);
 	 fclose(fp);
 
+	 /*
+	  * Strike this as these were uninitialized and wrote as zero in the original kmer_guts.c code.
+	  *
 	 strcpy(fileM,dataD);
 	 strcat(fileM,"/size_hash.and.table_size");
 	 fp = fopen(fileM,"w");
 	 fprintf(fp,"%lld\t%lld\n",sz,table_size);
 	 fclose(fp);
+	 */
      }
      else {
 	 size_hash = image->num_sigs;
@@ -641,7 +646,7 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
      }
  }
 
- void KmerGuts::gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq,
+ void KmerGuts::gather_hits(size_t ln_DNA, char strand,int prot_off,const char *pseq,
 			    unsigned char *pIseq,
 			    std::shared_ptr<std::vector<KmerCall>> calls,
 			    std::function<void(hit_in_sequence_t)> hit_cb,
@@ -658,23 +663,25 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
      }
      while (p < bound) {
 	 long long  where = lookup_hash_entry(kmersH->kmer_table,encodedK);
+
+	 unsigned int pLoc = (unsigned int) (p - pIseq);
 	 // std::cerr << p << " " << encodedK << " " << where << "\n";
 	 //for (int i = 0; i < KMER_SIZE; i++)
 	 //    std::cerr << prot_alpha[p[i]];
 	 //std::cerr << " " << encodedK << " " << where << "\n";
 	 if (where >= 0) {
 	     sig_kmer_t *kmers_hash_entry = &(kmersH->kmer_table[where]);
-	     int avg_off_end = kmers_hash_entry->avg_from_end;
-	     int fI        = kmers_hash_entry->function_index;
+	     unsigned short avg_off_end = kmers_hash_entry->avg_from_end;
+	     unsigned int fI        = kmers_hash_entry->function_index;
 	     int oI          = kmers_hash_entry->otu_index;
 	     float f_wt      = kmers_hash_entry->function_wt;
 	     if (hit_cb)
 	     {
 
-		 hit_cb(hit_in_sequence_t(*kmers_hash_entry, p - pIseq));
+		 hit_cb(hit_in_sequence_t(*kmers_hash_entry, pLoc));
 	     }
 
-	     if ((num_hits > 0) && (hits[num_hits-1].from0_in_prot + max_gap) < (p-pIseq))
+	     if ((num_hits > 0) && (hits[num_hits-1].from0_in_prot + max_gap) < pLoc)
 	     {
 		 if (num_hits >= min_hits)
 		 {
@@ -693,14 +700,14 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
 
 	     if ((! order_constraint) || (num_hits == 0) ||
 		 ((fI == hits[num_hits-1].fI) &&
-		  (abs(((p-pIseq) - hits[num_hits-1].from0_in_prot) -
+		  (abs((pLoc - hits[num_hits-1].from0_in_prot) -
 		       (hits[num_hits-1].avg_off_from_end - avg_off_end)
 		      ) <= 20)))
 	     {
 		 /* we have a new hit, so we add it to the global set of hits */
 		 hits[num_hits].oI = oI;
 		 hits[num_hits].fI = fI;
-		 hits[num_hits].from0_in_prot = p-pIseq;
+		 hits[num_hits].from0_in_prot = pLoc;
 		 hits[num_hits].avg_off_from_end = avg_off_end;
 		 hits[num_hits].function_wt = f_wt;
 		 if (num_hits < MAX_HITS_PER_SEQ - 2)
@@ -754,8 +761,7 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
      current_length_contig = ln;
      current_strand        = '+';
      current_prot_off      = 0;
-     int i;
-     for (i=0; (i < ln); i++)
+     for (size_t i=0; (i < ln); i++)
 	 pIseq[i] = to_amino_acid_off(*(pseq+i));
 
      // std::cerr << "'" << id << "' '" << pseq << "' " << ln << "\n";
@@ -771,9 +777,9 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
 
  {
      strcpy(current_id,id);
-     int ln = strlen(data);
+     size_t ln = strlen(data);
      current_length_contig = ln;
-     int i;
+     unsigned short i;
      for (i=0; (i < 3); i++)
      {
 	 translate(data,i,pseq,pIseq);
@@ -815,7 +821,7 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
     return oss.str();
 }
 
-std::string KmerGuts::format_otu_stats(const std::string &id, int size, KmerOtuStats &otu_stats)
+std::string KmerGuts::format_otu_stats(const std::string &id, size_t size, KmerOtuStats &otu_stats)
 {
     std::ostringstream oss;
     oss << "OTU-COUNTS\t" << id << "[" << size << "]";
@@ -844,13 +850,14 @@ struct less_second : std::binary_function<T,T,bool>
  * This code replicates the amino acid version of the SEED pipeline
  * km_process_hits_to_regions | km_pick_best_hit_in_peg
  */
-void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_index, std::string &function, int &score)
+void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score)
 {
+    function_index = -1;
+    function = "";
+    score = 0.0;
+
     if (calls.size() == 0)
     {
-	function_index = -1;
-	function = "";
-	score = 0;
 	return;
     }
     
@@ -970,7 +977,7 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
     }
     #endif
 
-    int score_offset;
+    float score_offset;
     if (vec.size() == 1)
 	score_offset = vec[0].second;
     else
@@ -978,7 +985,7 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
     
     // std::cerr << "Offset=" << score_offset << "\n";
 
-    if (score_offset >= 5)
+    if (score_offset >= 5.0)
     {
 	auto best = vec[0];
 	function_index = best.first;
@@ -990,5 +997,32 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
 	function_index = -1;
 	function = "";
 	score = 0;
+
+	/*
+	 * Try to compute a fallback function naming the two best hits if there are two hits within the
+	 * threshold but greater than the next hit.
+	 */
+	if (vec.size() >= 2)
+	{
+	    std::string f1 = function_at_index(vec[0].first);
+	    std::string f2 = function_at_index(vec[1].first);
+	    if (f2 > f1)
+		std::swap(f1, f2);
+
+	    if (vec.size() == 2)
+	    {
+		function = f1 + " ?? " + f2;
+		score = score_offset;
+	    }
+	    else if (vec.size() > 2)
+	    {
+		float pair_offset = vec[1].second - vec[2].second;
+		if (pair_offset > 5.0)
+		{
+		    function = f1 + " ?? " + f2;
+		    score = score_offset;
+		}
+	    }
+	}
     }
 }

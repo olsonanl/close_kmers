@@ -9,10 +9,14 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/thread/locks.hpp>
 #include <boost/thread/mutex.hpp>
+#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/iostreams/copy.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
 
 #include "popen.h"
 
 #include "kmer.h"
+#include "kguts.h"
 
 std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
     std::stringstream ss(s);
@@ -31,9 +35,9 @@ std::vector<std::string> split(const std::string &s, char delim) {
 }
 
 KmerPegMapping::KmerPegMapping() :
-    next_genome_id_(0),
     next_family_id_(0),
-    kcount_(0)
+    kcount_(0),
+    next_genome_id_(0)
 {
     std::cout << "Constructed KmerPegMapping\n";
 }
@@ -63,7 +67,7 @@ void KmerPegMapping::load_genome_map(const std::string &genome_file)
     {
 	std::vector<std::string> x = split(line, '\t');
 	std::string genome = x[1];
-	unsigned long id = next_genome_id_++;
+	unsigned int id = next_genome_id_++;
 	genome_to_id_[genome] = id;
 	id_to_genome_[id] = genome;
     }
@@ -83,10 +87,10 @@ void KmerPegMapping::load_mapping_file(const std::string &mapping_file)
     /*
      * Read and encode the peg/kmer data.
      */
-    unsigned int i = 0;
 
     abort();
     #if 0
+    unsigned int i = 0;
     std::ifstream kfile(mapping_file);
 
     std::string line;
@@ -118,8 +122,6 @@ void KmerPegMapping::load_compact_mapping_file(const std::string &mapping_file)
     /*
      * Read and encode the peg/kmer data.
      */
-    unsigned int i = 0;
-
     if (mapping_file.substr(mapping_file.length() - 3) == ".gz")
     {
 	Popen pipe_wrapper(("gunzip < " + mapping_file).c_str());
@@ -503,4 +505,24 @@ void KmerPegMapping::dump_sizes(std::ostream &os)
     os << "genome_to_id_: size=" << genome_to_id_.size() << "\n";
     os << "id_to_genome_: size=" << id_to_genome_.size() << "\n";
     
+}
+
+void KmerPegMapping::write_kmer_distribution(std::ostream&os)
+{
+    char kmer[10];
+    for (std::pair<encoded_kmer_t, family_counts_t> entry: kmer_to_family_id_)
+    {
+	const family_counts_t &counts = entry.second;
+	KmerGuts::decoded_kmer(entry.first, kmer);
+	os << kmer << "\t" << entry.first << "\t" << counts.size();
+	if (counts.size() == 1)
+	{
+	    const family_data_t &fam = family_data_[counts.begin()->first];
+	    os << "\t" << fam.pgf << "\t" << fam.plf << "\t" << fam.function << "\n";
+	}
+	else
+	{
+	    os << "\n";
+	}
+    }
 }

@@ -10,10 +10,10 @@ inline std::string make_string(boost::asio::streambuf& streambuf)
 }
 
 QueryRequest::QueryRequest(std::shared_ptr<KmerRequest2> owner, int content_length, bool chunked) :
-    owner_(owner),
-    parser_(std::bind(&QueryRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
     content_length_(content_length),
     chunked_(chunked),
+    owner_(owner),
+    parser_(std::bind(&QueryRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
     header_written_(false)
 {
 }
@@ -161,4 +161,5 @@ void QueryRequest::on_data(boost::system::error_code err, size_t bytes)
 int QueryRequest::on_parsed_seq(const std::string &id, const std::string &seq)
 {
     current_work_->push_back(std::make_pair(id, seq));
+    return 0;
 }

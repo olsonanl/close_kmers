@@ -182,7 +182,7 @@ public:
     unsigned int start;
     unsigned int end;
     int count;
-    int function_index;
+    unsigned int function_index;
     float weighted_hits;
 };
 
@@ -269,11 +269,11 @@ public:
     struct otu_count oI_counts[OI_BUFSZ];
     int num_oI;
     
-    int   current_fI;
+    unsigned int   current_fI;
     char  current_id[300];
-    int   current_length_contig;
+    size_t   current_length_contig;
     char  current_strand;
-    short current_prot_off;
+    unsigned short current_prot_off;
     int   order_constraint;
     int   min_hits;
     int   min_weighted_hits;
@@ -313,7 +313,7 @@ public:
 
     void process_set_of_hits(std::shared_ptr<std::vector<KmerCall>> calls,
 				       std::shared_ptr<KmerOtuStats> otu_stats);
-    void gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq,
+    void gather_hits(size_t ln_DNA, char strand,int prot_off,const char *pseq,
 		     unsigned char *pIseq,
 		     std::shared_ptr<std::vector<KmerCall>> calls,
 		     std::function<void(hit_in_sequence_t)> hit_cb,
@@ -348,9 +348,9 @@ public:
 
     std::string format_call(const KmerCall &c);
     std::string format_hit(const hit_in_sequence_t &h);
-    std::string format_otu_stats(const std::string &id, int size, KmerOtuStats &otu_stats);
+    std::string format_otu_stats(const std::string &id, size_t size, KmerOtuStats &otu_stats);
 
-    void find_best_call(const std::vector<KmerCall> &calls, int &function_index, std::string &function, int &score);
+    void find_best_call(const std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score);
 };
 
 

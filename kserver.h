@@ -75,6 +75,8 @@ public:
 
     bool family_mode() { return family_mode_; }
 
+    std::shared_ptr<KmerPegMapping> root_mapping() { return root_mapping_; }
+
 private:
     bool family_mode_;
 
@@ -91,6 +93,7 @@ private:
     std::set<std::shared_ptr<KmerRequest2> > active_;
 
     std::shared_ptr<std::map<std::string, std::shared_ptr<KmerPegMapping>>> mapping_map_;
+    std::shared_ptr<KmerPegMapping> root_mapping_;
 
     /*
      * NR loading support.
@@ -108,7 +111,7 @@ class NRLoader
 {
 public:
     NRLoader(NRLoadState &load_state, const std::string &file, std::shared_ptr<KmerPegMapping> root_mapping,
-	     std::shared_ptr<ThreadPool> thread_pool, int n_files, bool family_mode);
+	     std::shared_ptr<ThreadPool> thread_pool, size_t n_files, bool family_mode);
 
     void start();
     void load_families();
@@ -120,11 +123,11 @@ public:
     std::string file_;
     std::shared_ptr<KmerPegMapping> root_mapping_;
     std::shared_ptr<ThreadPool> thread_pool_;
-    int n_files_;
+    size_t n_files_;
 	
     std::shared_ptr<KmerRequestServer::seq_list_t> cur_work_;
-    int max_size_;
-    int cur_size_;
+    size_t max_size_;
+    size_t cur_size_;
     boost::mutex dbg_mut_;
     int chunks_started_;
     int chunks_finished_;

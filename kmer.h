@@ -112,6 +112,8 @@ public:
     genome_to_id_map_t genome_to_id_;
     id_to_genome_map_t id_to_genome_;
 
+    void write_kmer_distribution(std::ostream &os);
+
     void load_genus_map(const std::string &genus_file);
     void load_families(const std::string &families_file);
     const std::string& lookup_genus(const std::string &genus) { return genus_map_[genus]; }
@@ -134,7 +136,7 @@ public:
     std::string decode_id(encoded_id_t id);
 
     unsigned long kcount_;
-    unsigned long next_genome_id_;
+    unsigned int next_genome_id_;
 
     void dump_sizes(std::ostream &os);
 };

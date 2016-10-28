@@ -22,16 +22,22 @@ private:
     bool chunked_;
     std::shared_ptr<KmerRequest2> owner_;
     FastaParser parser_;
-    std::map<KmerPegMapping::encoded_id_t, unsigned int> hit_count_;
-    std::map<KmerPegMapping::encoded_id_t, unsigned int> hit_total_;
 
-    int kmer_hit_threshold_;
+    struct sequence_accumulated_score_t {
+	unsigned int hit_count;
+	unsigned int hit_total;
+	float weighted_total;
+    } ;
+    std::unordered_map<KmerPegMapping::encoded_id_t, sequence_accumulated_score_t> seq_score_;
+
+    unsigned int kmer_hit_threshold_;
     bool header_written_;
     bool find_best_match_;
+    bool allow_ambiguous_functions_;
+    enum { best_by_accumulation, best_by_count, best_by_weighted_count } best_match_method_;
     std::string target_genus_;
     unsigned long target_genus_id_;
     
-
     typedef std::vector<ProteinSequence> work_list_t;
     std::shared_ptr<work_list_t> current_work_;
 

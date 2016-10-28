@@ -33,13 +33,14 @@ const boost::regex genus_loookup_path_regex("^/genus_lookup/([^/]+)$");
 KmerRequest2::KmerRequest2(std::shared_ptr<KmerRequestServer> server,
 			   boost::asio::io_service &io_service,
 			   std::shared_ptr<std::map<std::string, std::shared_ptr<KmerPegMapping> > > mapping_map,
-			   std::shared_ptr<ThreadPool> thread_pool) : server_(server),
-								      io_service_(io_service),
-								      socket_(io_service_),
-								      mapping_map_(mapping_map),
-								      request_(65536),
-								      thread_pool_(thread_pool)
-							      
+			   std::shared_ptr<ThreadPool> thread_pool) :
+    server_(server),
+    io_service_(io_service),
+    socket_(io_service_),
+    request_(65536),
+    mapping_map_(mapping_map),
+    thread_pool_(thread_pool)
+   
 {
     // std::cerr << "construct krequest2 " << this << "\n";
 }
