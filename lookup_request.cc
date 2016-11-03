@@ -29,7 +29,6 @@ LookupRequest::LookupRequest(std::shared_ptr<KmerRequest2> owner, std::shared_pt
     content_length_(content_length),
     chunked_(chunked),
     owner_(owner),
-    parser_(std::bind(&LookupRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
     kmer_hit_threshold_(3),
     header_written_(false),
     find_best_match_(false),
@@ -38,6 +37,7 @@ LookupRequest::LookupRequest(std::shared_ptr<KmerRequest2> owner, std::shared_pt
     target_genus_(owner->parameters()["target_genus"]),
     target_genus_id_(0)
 {
+    parser_.set_callback(std::bind(&LookupRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2));
     try {
 	kmer_hit_threshold_ = std::stoi(owner->parameters()["kmer_hit_threhsold"]);
     } catch (const std::invalid_argument& ia) {}
@@ -242,7 +242,7 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 			    top_score best_lf({score: 0.0 });
 			    top_score best_gf({score: 0.0 });
 
-			    std::unordered_map<std::string, float> pgf_rollup;
+			    std::unordered_map<std::string, float> pgf_rollup, pgf_rollup_ambig;
 
 				
 			    for (auto hit_ent: seq_score_)
@@ -260,16 +260,27 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 				const KmerPegMapping::family_data_t &fam_data = fent->second;
 				if (do_ambig_test)
 				{
-				    if (fam_data.function != best_call_function && fam_data.function != ambig_function)
+				    if (fam_data.function == best_call_function)
+				    {
+					pgf_rollup[fam_data.pgf] += score_ent.weighted_total;
+				    }
+				    else if (fam_data.function == ambig_function)
+				    {
+					pgf_rollup_ambig[fam_data.pgf] += score_ent.weighted_total;
+				    }
+				    else
+				    {
 					continue;
+				    }
 				}
 				else
 				{
-				    if (fam_data.function != best_call_function)
+				    if (fam_data.function == best_call_function)
+					pgf_rollup[fam_data.pgf] += score_ent.weighted_total;
+				    else
 					continue;
 				}
 
-				pgf_rollup[fam_data.pgf] += score_ent.weighted_total;
 
 				// std::cerr << score << " " << best_lf.score << " " << fam_data.genus_id << " " << target_genus_id_ << "\n";
 				if (score_ent.weighted_total > best_lf.score && fam_data.genus_id == target_genus_id_)
@@ -279,7 +290,11 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 				    best_lf.function = fam_data.function;
 				}				    
 			    }
-			    for (auto pgf_ent: pgf_rollup)
+
+			    std::unordered_map<std::string, float> *matching_rollup = &pgf_rollup;
+			    if (do_ambig_test && best_lf.function == ambig_function)
+				matching_rollup = &pgf_rollup_ambig;
+			    for (auto pgf_ent: *matching_rollup)
 			    {
 				const std::string &pgf = pgf_ent.first;
 				const float &score = pgf_ent.second;

@@ -18,9 +18,9 @@ AddRequest::AddRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<Kmer
     mapping_(mapping),
     content_length_(content_length),
     chunked_(chunked), 
-    owner_(owner),
-    parser_(std::bind(&AddRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2))
+    owner_(owner)
 {
+    parser_.set_callback(std::bind(&AddRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2));
     silent_ = 0;
     try {
 	silent_ = std::stoi(owner_->parameters()["silent"]);

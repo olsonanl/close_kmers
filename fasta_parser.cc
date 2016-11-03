@@ -1,7 +1,7 @@
 #include "fasta_parser.h"
 #include <cctype>
 
-FastaParser::FastaParser(std::function<int(const std::string &id, const std::string &seq)> on_seq) : on_seq_(on_seq)
+FastaParser::FastaParser()
 {
     init_parse();
 }
@@ -10,6 +10,7 @@ void FastaParser::init_parse()
 {
     cur_state_ = s_start;
     cur_id_ = "";
+    cur_def_ = "";
     cur_seq_ = "";
 }
 
@@ -21,13 +22,14 @@ void FastaParser::parse(std::istream &stream)
     {
 	parse_char(c);
     }
-    on_seq_(cur_id_, cur_seq_);
+    parse_complete();
 }
 
 void FastaParser::parse_complete()
 {
-    on_seq_(cur_id_, cur_seq_);
+    call_callback();
     cur_id_ = "";
+    cur_def_ = "";
     cur_seq_ = "";
 }
 

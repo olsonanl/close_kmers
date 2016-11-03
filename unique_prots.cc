@@ -72,7 +72,9 @@ int main(int argc, char* argv[])
 
     kmap_t kmap;
 
-    FastaParser parser([&kguts, &kmap](const std::string &id, const std::string &seq) {
+    FastaParser parser;
+
+    parser.set_callback([&kguts, &kmap](const std::string &id, const std::string &seq) {
 	    klist_t klist;
 	    auto cb = [&kguts, &klist, id, seq](KmerGuts::hit_in_sequence_t hit) {
 		klist.insert(hit.hit.which_kmer);

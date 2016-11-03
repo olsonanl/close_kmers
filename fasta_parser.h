@@ -16,8 +16,17 @@ public:
 	s_id_or_data,
     };
 
+    FastaParser();
 
-    FastaParser(std::function<int(const std::string &id, const std::string &seq)> on_seq);
+    void set_callback(std::function<int(const std::string &id, const std::string &seq)> on_seq) {
+	on_seq_ = on_seq;
+    }
+    
+    void set_def_callback(std::function<int(const std::string &id, const std::string &def, const std::string &seq)> on_seq) {
+	on_def_seq_ = on_seq;
+    }
+	    
+
     void parse(std::istream &stream);
     void init_parse();
     inline void parse_char(char c)
@@ -44,6 +53,7 @@ public:
 	case s_id:
 	    if (isblank(c))
 	    {
+		cur_def_.push_back(c);
 		cur_state_ = s_defline;
 	    }
 	    else if (c == '\n')
@@ -60,6 +70,10 @@ public:
 	    if (c == '\n')
 	    {
 		cur_state_ = s_data;
+	    }
+	    else
+	    {
+		cur_def_.push_back(c);
 	    }
 	    break;
 
@@ -84,9 +98,9 @@ public:
 	case s_id_or_data:
 	    if (c == '>')
 	    {
-		if (on_seq_)
-		    on_seq_(cur_id_, cur_seq_);
+		call_callback();
 		cur_id_ = "";
+		cur_def_ = "";
 		cur_seq_ = "";
 		cur_state_ = s_id;
 	    }
@@ -120,8 +134,18 @@ private:
     state cur_state_;
     std::string cur_id_;
     std::string cur_seq_;
+    std::string cur_def_;
     
     std::function<int(const std::string &id, const std::string &seq)> on_seq_;
+    std::function<int(const std::string &id, const std::string &def, const std::string &seq)> on_def_seq_;
+
+    void call_callback()
+    {
+	if (on_seq_)
+	    on_seq_(cur_id_, cur_seq_);
+	if (on_def_seq_)
+	    on_def_seq_(cur_id_, cur_def_, cur_seq_);
+    }
 };
 
 

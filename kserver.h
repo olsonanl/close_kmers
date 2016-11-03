@@ -16,6 +16,7 @@
 #include "kmer.h"
 #include "krequest2.h"
 #include "threadpool.h"
+#include "tbb/atomic.h"
 
 class NRLoadState
 {
@@ -129,8 +130,8 @@ public:
     size_t max_size_;
     size_t cur_size_;
     boost::mutex dbg_mut_;
-    int chunks_started_;
-    int chunks_finished_;
+    tbb::atomic<int> chunks_started_;
+    tbb::atomic<int> chunks_finished_;
     int on_parsed_seq(const std::string &id, const std::string &seq);
     void thread_load(std::shared_ptr<KmerRequestServer::seq_list_t> sent_work, int count);
     void on_hit(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_id_t &enc_id, size_t seq_len);

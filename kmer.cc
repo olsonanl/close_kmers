@@ -232,12 +232,17 @@ void KmerPegMapping::add_fam_mapping(KmerPegMapping::encoded_family_id_t fam_id,
      */
     
     std::pair<family_map_type_t::iterator, bool> n = kmer_to_family_id_.emplace(std::make_pair(kmer, family_counts_t()));
-    boost::lock_guard<boost::mutex> guard(mtx_);
+
+    // For concurrent map don't need this
+    // boost::lock_guard<boost::mutex> guard(mtx_);
+    tbb::spin_mutex::scoped_lock guard(tmtx_);
 
     // for the unordered_set
     //n.first->second.insert(fam_id);
     // for the unordered_map with integral value
+
     n.first->second[fam_id]++;
+
     // for the unordered map with the pair<count,score> value
     //auto it = n.first->find(fam_id);
 

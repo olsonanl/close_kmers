@@ -244,7 +244,8 @@ void NRLoader::load_families()
 	std::cerr << "tp size=" << thread_pool_->size() << " max_size_=" << max_size_ << "\n";
     }
 
-    FastaParser parser(std::bind(&NRLoader::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2));
+    FastaParser parser;
+    parser.set_callback(std::bind(&NRLoader::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2));
 
     std::ifstream inp(file_);
     parser.parse(inp);
@@ -301,6 +302,11 @@ void NRLoader::on_hit_fam(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encod
     root_mapping_->add_fam_mapping(enc_id, hit.hit.which_kmer);
 }
 
+
+/*
+ * Process a bucket of work in the worker thread.
+ *
+ */
 void NRLoader::thread_load(std::shared_ptr<KmerRequestServer::seq_list_t> sent_work, int count)
 {
     KmerGuts *kguts = thread_pool_->kguts_.get();
@@ -320,7 +326,8 @@ void NRLoader::thread_load(std::shared_ptr<KmerRequestServer::seq_list_t> sent_w
 		if (fam_id_iter == root_mapping_->peg_to_family_.end())
 		{
 		    std::string dec = root_mapping_->decode_id(enc_id);
-		    std::cout << "NO FAM FOR " << enc_id << " " << dec << "\n";
+		    std::cout << "NO FAM FOR " << id << " " << enc_id << " " << dec << "\n";
+		    my_load_state_.pending_dec();
 		    return;
 		}
 		KmerPegMapping::encoded_family_id_t fam_id = fam_id_iter->second;

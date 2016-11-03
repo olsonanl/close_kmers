@@ -14,9 +14,9 @@ MatrixRequest::MatrixRequest(std::shared_ptr<KmerRequest2> owner, std::shared_pt
     mapping_(mapping),
     content_length_(content_length),
     chunked_(chunked),
-    owner_(owner),
-    parser_(std::bind(&MatrixRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2))
+    owner_(owner)
 {
+    parser_.set_callback(std::bind(&MatrixRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void MatrixRequest::run()

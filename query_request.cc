@@ -13,9 +13,9 @@ QueryRequest::QueryRequest(std::shared_ptr<KmerRequest2> owner, int content_leng
     content_length_(content_length),
     chunked_(chunked),
     owner_(owner),
-    parser_(std::bind(&QueryRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
     header_written_(false)
 {
+    parser_.set_callback(std::bind(&QueryRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void QueryRequest::run()

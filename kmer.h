@@ -13,6 +13,7 @@
 #ifdef USE_TBB
 #include "tbb/concurrent_unordered_map.h"
 #include "tbb/concurrent_vector.h"
+#include "tbb/spin_mutex.h"
 #endif
 
 #include <boost/thread/mutex.hpp>
@@ -71,9 +72,10 @@ public:
 
 #ifdef USE_TBB
     typedef std::unordered_map<encoded_family_id_t, unsigned int> family_counts_t;
+    // typedef tbb::concurrent_unordered_map<encoded_family_id_t, unsigned int> family_counts_t;
+
     //typedef std::unordered_set<encoded_family_id_t> family_counts_t;
     //typedef tbb::concurrent_vector<encoded_family_id_t> family_counts_t;
-    //typedef tbb::concurrent_unordered_map<encoded_family_id_t, unsigned long> family_counts_t;
     typedef tbb::concurrent_vector<encoded_id_t> id_set;
     typedef tbb::concurrent_unordered_map<encoded_kmer_t, id_set> map_type_t;
     typedef tbb::concurrent_unordered_map<encoded_kmer_t, family_counts_t> family_map_type_t;
@@ -94,6 +96,7 @@ public:
 #endif
 
     boost::mutex mtx_;
+    tbb::spin_mutex tmtx_;
 
     // Peg ID mapping
     encoded_id_t next_peg_id_;

@@ -46,6 +46,7 @@ int main(int argc, char* argv[])
     bool daemonize;
     std::string pid_file;
     std::string kmer_family_distribution_file;
+    bool no_listen;
     
     desc.add_options()
 	("help,h", "show this help message")
@@ -64,6 +65,7 @@ int main(int argc, char* argv[])
 	("reserve-mapping", po::value<unsigned long>(), "Reserve this much space in global mapping table")
 	("no-populate-mmap", po::bool_switch(), "Don't populate mmap data at startup")
 	("debug-http", po::bool_switch(), "Debug HTTP protocol")
+	("no-listen", po::bool_switch(&no_listen), "Don't listen - just load data and quit. For profiling.")
 	("daemonize", po::bool_switch(&daemonize), "Run the service in the background")
 	("pid-file", po::value<std::string>(&pid_file), "Write the process id to this file")
 	;
@@ -273,6 +275,12 @@ int main(int argc, char* argv[])
 	end2 = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end2 - end;
 	std::cerr << "distribution write time " << elapsed_seconds.count() << "\n";
+    }
+
+    if (no_listen)
+    {
+	std::cerr << "Quitting due to --no-listen being set\n";
+	exit(0);
     }
 
     int additional_threads = n_kmer_threads - n_load_threads;
