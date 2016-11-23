@@ -30,7 +30,40 @@ OPT = -g
 
 else
 ifeq ($(BUILD_DEBUG),2)
-OPT = -g -O3
+UFLAGS = \
+-u malloc \
+-u free \
+-u realloc \
+-u getenv \
+-u setenv \
+-u __errno_location \
+-u pthread_key_create \
+-u pthread_key_delete \
+-u pthread_setspecific \
+-u pthread_getspecific \
+-u pthread_spin_init \
+-u pthread_spin_destroy \
+-u pthread_spin_lock \
+-u pthread_spin_trylock \
+-u pthread_spin_unlock \
+-u pthread_mutex_init \
+-u pthread_mutex_destroy \
+-u pthread_mutex_trylock \
+-u pthread_mutex_lock \
+-u pthread_mutex_unlock \
+-u pthread_cond_init \
+-u pthread_cond_destroy \
+-u pthread_cond_signal \
+-u pthread_cond_wait \
+-u _pthread_cleanup_push \
+-u _pthread_cleanup_pop \
+-u pthread_setcancelstate \
+-u pthread_self \
+-u pthread_yield
+
+
+OPT = -g -O3 -DTBB_USE_THREADING_TOOLS -fno-omit-frame-pointer $(UFLAGS)
+
 
 # OPT = -g -DBOOST_ASIO_ENABLE_HANDLER_TRACKING
 
@@ -94,7 +127,8 @@ BLCR_CFLAGS = -DBLCR_SUPPORT -I$(BLCR_DIR)/include
 BLCR_LIB = -L$(BLCR_DIR)/lib -lcr
 endif
 
-CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) $(BLCR_CFLAGS) $(TBB_CFLAGS) $(NUMA_CFLAGS) -Wconversion -Wall -Werror
+#WARNING_FLAGS = -Wconversion -Wall -Werror
+CXXFLAGS = $(STDCPP) $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) $(BLCR_CFLAGS) $(TBB_CFLAGS) $(NUMA_CFLAGS) $(WARNING_FLAGS)
 CFLAGS = $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) -Wconversion -Wall
 
 # LDFLAGS  = -static
@@ -117,6 +151,9 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 x.o: x.cc kguts.h
 
 x: x.o
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+
+xx: xx.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 tkguts: tkguts.o kguts.o kmer_image.o 
@@ -142,7 +179,7 @@ kc: kc.o kmer.o kserver.o krequest.o
 
 kser: kser.o kmer.o kserver.o kguts.o \
 	fasta_parser.o krequest2.o add_request.o threadpool.o matrix_request.o query_request.o lookup_request.o \
-	md5.o kmer_image.o numa.o
+	md5.o kmer_image.o numa.o kmer_inserter.o
 	$(CXX) $(LDFLAGS) $(OPT) -o kser $^ $(LIBS)
 
 unique_prots: unique_prots.o kguts.o kmer_image.o fasta_parser.o
@@ -163,37 +200,45 @@ add_request.o: add_request.h compute_request.h krequest2.h kmer.h klookup.h
 add_request.o: kguts.h kmer_image.h fasta_parser.h klookup2.h klookup3.h
 add_request.o: threadpool.h numa.h md5.h
 fasta_parser.o: fasta_parser.h
-kc.o: kmer.h kserver.h krequest2.h klookup.h kguts.h kmer_image.h
-kc.o: fasta_parser.h klookup2.h klookup3.h compute_request.h threadpool.h
-kc.o: numa.h
+kc.o: kmer.h kserver.h kmer_inserter.h krequest2.h klookup.h kguts.h
+kc.o: kmer_image.h fasta_parser.h klookup2.h klookup3.h compute_request.h
+kc.o: threadpool.h numa.h
 kfile.o: kguts.h kmer_image.h fasta_parser.h
 kguts.o: kguts.h kmer_image.h global.h
 klookup2.o: klookup2.h kmer.h kguts.h kmer_image.h fasta_parser.h global.h
 klookup3.o: klookup3.h kmer.h global.h
 klookup.o: klookup.h kmer.h kguts.h kmer_image.h fasta_parser.h global.h
-kmer.o: popen.h kmer.h
+kmer.o: parallel_read.h parallel_read.cc popen.h kmer.h kguts.h kmer_image.h
+kmer.o: global.h
 kmerge.o: stringutil.h
 kmer_image.o: kmer_image.h global.h
+kmer_inserter.o: kmer_inserter.h kmer.h
 krequest2.o: krequest2.h kmer.h klookup.h kguts.h kmer_image.h fasta_parser.h
 krequest2.o: klookup2.h klookup3.h compute_request.h threadpool.h numa.h
-krequest2.o: kserver.h global.h add_request.h matrix_request.h prot_seq.h
-krequest2.o: query_request.h lookup_request.h debug.h
+krequest2.o: kserver.h kmer_inserter.h global.h add_request.h
+krequest2.o: matrix_request.h prot_seq.h query_request.h lookup_request.h
+krequest2.o: debug.h
 krequest.o: krequest.h kmer.h klookup.h kguts.h kmer_image.h fasta_parser.h
 krequest.o: klookup2.h klookup3.h global.h
-kser.o: global.h kmer.h kserver.h krequest2.h klookup.h kguts.h kmer_image.h
-kser.o: fasta_parser.h klookup2.h klookup3.h compute_request.h threadpool.h
-kser.o: numa.h
-kserver.o: kserver.h kmer.h krequest2.h klookup.h kguts.h kmer_image.h
-kserver.o: fasta_parser.h klookup2.h klookup3.h compute_request.h
-kserver.o: threadpool.h numa.h global.h
+kser.o: global.h kmer.h kserver.h kmer_inserter.h krequest2.h klookup.h
+kser.o: kguts.h kmer_image.h fasta_parser.h klookup2.h klookup3.h
+kser.o: compute_request.h threadpool.h numa.h
+kserver.o: kserver.h kmer.h kmer_inserter.h krequest2.h klookup.h kguts.h
+kserver.o: kmer_image.h fasta_parser.h klookup2.h klookup3.h
+kserver.o: compute_request.h threadpool.h numa.h global.h
 lookup_request.o: lookup_request.h compute_request.h krequest2.h kmer.h
 lookup_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
-lookup_request.o: klookup3.h threadpool.h numa.h prot_seq.h global.h
+lookup_request.o: klookup3.h threadpool.h numa.h prot_seq.h kserver.h
+lookup_request.o: kmer_inserter.h global.h
 matrix_request.o: matrix_request.h compute_request.h krequest2.h kmer.h
 matrix_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
 matrix_request.o: klookup3.h threadpool.h numa.h prot_seq.h
+parse_fasta.o: fasta_parser.h
 query_request.o: query_request.h compute_request.h krequest2.h kmer.h
 query_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
 query_request.o: klookup3.h threadpool.h numa.h
 threadpool.o: threadpool.h kmer_image.h kguts.h numa.h
+tkguts.o: kguts.h kmer_image.h global.h
+unique_prots.o: global.h kguts.h kmer_image.h fasta_parser.h
 x.o: kguts.h kmer_image.h
+xx.o: parallel_read.h parallel_read.cc

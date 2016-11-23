@@ -1,6 +1,7 @@
 #ifndef _fasta_parser_h
 #define _fasta_parser_h
 
+#include <sstream>
 #include <iostream>
 #include <functional>
 
@@ -36,6 +37,8 @@ public:
 	  std::cout << cur_id_ << "\n";
 	  std::cout << cur_seq_ << "\n";
 	*/
+	if (c == '\n')
+	    line_number++;
 	std::string err;
 	switch (cur_state_)
 	{
@@ -91,7 +94,7 @@ public:
 	    {
 		err = "Bad data character '";
 		err += c;
-		err += "'";
+		err += "'"; 
 	    }
 	    break;
 
@@ -123,7 +126,7 @@ public:
 	}
 	if (!err.empty())
 	{
-	    std::cerr << "Error found " << err << std::endl;
+	    std::cerr << "Error found: " << err << " at line " << line_number << " id='" << cur_id_ << "'" << std::endl;
 	    return;
 	}
     }
@@ -131,6 +134,7 @@ public:
     void parse_complete();
 
 private:
+    int line_number;
     state cur_state_;
     std::string cur_id_;
     std::string cur_seq_;

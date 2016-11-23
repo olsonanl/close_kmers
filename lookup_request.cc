@@ -419,15 +419,15 @@ void LookupRequest::on_hit(KmerGuts::hit_in_sequence_t kmer)
 	KmerPegMapping::family_map_type_t::iterator ki = mapping_->kmer_to_family_id_.find(kmer.hit.which_kmer);
 	if (ki != mapping_->kmer_to_family_id_.end())
 	{
-	    float weight = 1.0f / (float) ki->second.size();
-	    for (auto ent : ki->second)
+	    KmerPegMapping::family_counts_t &counts = ki->second;
+	    float weight = 1.0f / (float) counts.size();
+	    for (KmerPegMapping::encoded_family_id_t ent : ki->second)
 	    {
 		// auto fent = mapping_->id_to_family_[ent.first];
 		// std::cout << "got ent " << ent.first << " " << fent.second << " with count " << ent.second << "\n";
-		sequence_accumulated_score_t &s = seq_score_[ent.first];
-		s.hit_count += ent.second;
-		s.hit_total++;
-		s.weighted_total += weight;
+		//sequence_accumulated_score_t &s = seq_score_[ent.first];
+		sequence_accumulated_score_t &s = seq_score_[ent];
+		s.increment(ent, weight);
 	    }
 	}
     }

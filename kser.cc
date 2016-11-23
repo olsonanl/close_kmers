@@ -50,6 +50,8 @@ int main(int argc, char* argv[])
     
     desc.add_options()
 	("help,h", "show this help message")
+	("n-family-file-threads", po::value<int>()->default_value(1), "number of family file reader threads")
+	("n-inserter-threads", po::value<int>()->default_value(1), "number of kmer inserter threads")
 	("n-load-threads", po::value<int>(&n_load_threads)->default_value(1), "number of NR load threads")
 	("n-kmer-threads", po::value<int>(&n_kmer_threads)->default_value(1), "number of kmer processing threads")
 	("listen-port-file", po::value<std::string>(&listen_port_file)->default_value("/dev/null"), "save the listen port to this file")

@@ -948,18 +948,24 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
      * between the best function and next best function. We resurrect that here.
      *
      */
-    
-    typedef std::map<int, float> map_t;
+
+    struct FuncScore
+    {
+	int count;
+	float weighted;
+    };
+    typedef std::map<int, FuncScore> map_t;
 
     map_t by_func;
 
     for (auto c: merged)
     {
-	by_func[c.function_index] += (float) c.count;
+	by_func[c.function_index].count += c.count;
+	by_func[c.function_index].weighted += c.weighted_hits;
     }
 
     //typedef map_t::value_type ent_t;
-    typedef std::pair<int, float> ent_t;
+    typedef std::pair<int, FuncScore> ent_t;
 
     std::vector<ent_t> vec;
     for (auto it = by_func.begin(); it != by_func.end(); it++)
@@ -967,7 +973,7 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
     
     std::partial_sort(vec.begin(), vec.begin() + 2, vec.end(), 
 			 [](const ent_t& s1, const ent_t& s2) {
-			     return s1.second > s2.second; });
+			     return s1.second.weighted > s2.second.weighted; });
 
     #if 0
     for (auto x: vec)
@@ -976,12 +982,12 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
 	std::cerr << function_at_index(x.first) << "\n";
     }
     #endif
-
+    
     float score_offset;
     if (vec.size() == 1)
-	score_offset = vec[0].second;
+	score_offset = (float) vec[0].second.count;
     else
-	score_offset = vec[0].second  - vec[1].second;
+	score_offset = (float) (vec[0].second.count - vec[1].second.count);
     
     // std::cerr << "Offset=" << score_offset << "\n";
 
@@ -1016,7 +1022,7 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
 	    }
 	    else if (vec.size() > 2)
 	    {
-		float pair_offset = vec[1].second - vec[2].second;
+		float pair_offset = (float) (vec[1].second.count - vec[2].second.count);
 		if (pair_offset > 5.0)
 		{
 		    function = f1 + " ?? " + f2;

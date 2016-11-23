@@ -14,6 +14,7 @@
 #include <set>
 #include <memory>
 #include "kmer.h"
+#include "kmer_inserter.h"
 #include "krequest2.h"
 #include "threadpool.h"
 #include "tbb/atomic.h"
@@ -112,12 +113,14 @@ class NRLoader
 {
 public:
     NRLoader(NRLoadState &load_state, const std::string &file, std::shared_ptr<KmerPegMapping> root_mapping,
-	     std::shared_ptr<ThreadPool> thread_pool, size_t n_files, bool family_mode);
+	     std::shared_ptr<ThreadPool> thread_pool, size_t n_files, bool family_mode,
+	     KmerInserter &inserter);
 
     void start();
     void load_families();
 
     bool family_mode_;
+    KmerInserter &inserter_;
 
     NRLoadState &load_state_;
     NRLoadState my_load_state_;

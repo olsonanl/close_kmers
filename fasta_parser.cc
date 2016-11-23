@@ -1,7 +1,7 @@
 #include "fasta_parser.h"
 #include <cctype>
 
-FastaParser::FastaParser()
+FastaParser::FastaParser() : line_number(1)
 {
     init_parse();
 }

@@ -211,7 +211,7 @@ int main(int argc, char **argv)
 
 	if (vm.count("output-file"))
 	{
-	    out = new ofstream(output_file);
+	    out = new std::ofstream(output_file);
 	}
 	else
 	{
@@ -261,7 +261,7 @@ int main(int argc, char **argv)
 
 	    if (vm.count("output-file"))
 	    {
-		out = new ofstream(output_file);
+		out = new std::ofstream(output_file);
 	    }
 	    else
 	    {

@@ -13,10 +13,13 @@
 #include <boost/iostreams/copy.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
 
+#include "parallel_read.h"
+
 #include "popen.h"
 
 #include "kmer.h"
 #include "kguts.h"
+#include "global.h"
 
 std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
     std::stringstream ss(s);
@@ -206,25 +209,36 @@ void KmerPegMapping::add_mapping(KmerPegMapping::encoded_id_t enc, unsigned long
     
 }
 
+inline static void fam_map_insert(std::vector<KmerPegMapping::encoded_family_id_t> &data,
+				  KmerPegMapping::encoded_family_id_t fam_id,
+				  KmerPegMapping::encoded_kmer_t kmer)
+{
+    auto ent = std::find(data.begin(), data.end(), fam_id);
+    if (ent == data.end())
+    {
+//	std::cerr << kmer << " add new " << fam_id << "\n";
+	data.push_back(fam_id);
+    }
+//    else
+//    {
+//	std::cerr << kmer << " have " << fam_id << "\n";
+//    }
+}
+
+inline static void fam_map_insert(std::unordered_map<KmerPegMapping::encoded_family_id_t, unsigned int> &data,
+				  KmerPegMapping::encoded_family_id_t fam_id)
+{
+    data[fam_id]++;
+}
+
+inline static void fam_map_insert(std::unordered_set<KmerPegMapping::encoded_family_id_t> &data,
+				  KmerPegMapping::encoded_family_id_t fam_id)
+{
+    data.insert(fam_id);
+}
+
 void KmerPegMapping::add_fam_mapping(KmerPegMapping::encoded_family_id_t fam_id, encoded_kmer_t kmer)
 {
-
-    /*
-     * use id_to_family_ to determine the family mapped to this id, and store
-     * the kmer relationship.
-     */
-    /* Moved to the calling code.
-
-    auto fam_id_iter = peg_to_family_.find(enc);
-    if (fam_id_iter == peg_to_family_.end())
-    {
-	std::string dec = decode_id(enc);
-	std::cout << "NO FAM FOR " << enc << " " << dec << "\n";
-	return;
-    }
-    encoded_family_id_t fam_id = fam_id_iter->second;
-    */
-
     /*
      * kmer_to_family_id_ is a tbb concurrent type so we don't have to lock for the
      * emplace. However, to save memory the contained set is not a concurrent type,
@@ -235,22 +249,17 @@ void KmerPegMapping::add_fam_mapping(KmerPegMapping::encoded_family_id_t fam_id,
 
     // For concurrent map don't need this
     // boost::lock_guard<boost::mutex> guard(mtx_);
-    tbb::spin_mutex::scoped_lock guard(tmtx_);
+    // tbb::spin_mutex::scoped_lock guard(tmtx_);
 
-    // for the unordered_set
-    //n.first->second.insert(fam_id);
-    // for the unordered_map with integral value
+    family_map_type_t::iterator &fmt = n.first;
 
-    n.first->second[fam_id]++;
-
-    // for the unordered map with the pair<count,score> value
-    //auto it = n.first->find(fam_id);
+    fam_map_insert(fmt->second, fam_id, kmer);
 
     if (n.second)
     {
-	kcount_++;
-	if (kcount_ % 1000000 == 0)
-	    std::cerr << kmer_to_family_id_.size() << " entries with " << kcount_ << " values load-factor " << kmer_to_family_id_.load_factor() << "\n";
+	unsigned long val = kcount_++;
+	if (val % 1000000 == 0)
+	    std::cerr << kmer_to_family_id_.size() << " entries with " << val << " values load-factor " << kmer_to_family_id_.load_factor() << "\n";
     }
 }
 
@@ -267,14 +276,7 @@ KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string &peg)
     }
     else
     {
-	boost::lock_guard<boost::mutex> guard(mtx_);
-	
-	encoded_id_t id = next_peg_id_++;
-	peg_to_id_[peg] = id;
-	id_to_peg_[id] = peg;
-	if (id % 1000000 == 0)
-	    std::cerr << "assigned " << peg << " " << id << "\n";
-	
+	encoded_id_t id = assign_new_peg_id(peg);
 	return id;
     }
 }
@@ -378,7 +380,6 @@ void KmerPegMapping::load_families(const std::string &families_file)
 	exit(1);
     }
 
-
     /*
      * Read a sample of lines to estimate number of lines in file.
      */
@@ -405,95 +406,101 @@ void KmerPegMapping::load_families(const std::string &families_file)
     peg_to_family_.reserve(size_estimate * 10);
     #endif
 
-    unsigned int lineno = 0;
+    f.close();
+
+    int n_threads = (*g_parameters)["n-family-file-threads"].as<int>();
+    
     std::map<std::string, bool> warned;
-    while (std::getline(f, line))
-    {
-	lineno++;
-	std::vector<std::string> cols;
-	boost::split(cols, line, boost::is_any_of("\t"));
+    parallel_read(families_file, n_threads, [this, &warned, zeros, families_file](const std::string &line) {
 
-	std::string pgf("PGF_");
-	pgf += cols[0].substr(2);
-	std::string plf("PLF_");
-	auto mapped_name = genus_map_.find(cols[7]);
-	unsigned long genus_id = 0;
-	if (mapped_name == genus_map_.end())
-	{
-	    if (!warned[cols[7]])
+	    std::vector<std::string> cols;
+	    boost::split(cols, line, boost::is_any_of("\t"));
+
+	    std::string pgf("PGF_");
+	    pgf += cols[0].substr(2);
+	    std::string plf("PLF_");
+	    auto mapped_name = genus_map_.find(cols[7]);
+	    unsigned long genus_id = 0;
+	    if (mapped_name == genus_map_.end())
 	    {
-		std::cerr << "Cannot map genus '" << cols[7] << "' at line " << lineno << " of " << families_file << "\n";
-		warned[cols[7]] = true;
+		if (!warned[cols[7]])
+		{
+		    std::cerr << "Cannot map genus '" << cols[7] << "' in " << families_file << "\n";
+		    warned[cols[7]] = true;
+		}
+		plf += cols[7];
 	    }
-	    plf += cols[7];
-	}
-	else
-	{
-	    plf += mapped_name->second;
-	    genus_id = std::stoul(mapped_name->second);
-	}
-	plf += "_";
-	plf += zeros.substr(0, 8 - cols[8].size());
-	plf += cols[8];
-	encoded_id_t id = encode_id(cols[3]);
-
-	// assign unique key for for family
-	family_key_t fkey(pgf, plf);
-	encoded_family_id_t fam_id;
-
-	unsigned long seqlen = std::stoul(cols[4]);
-	auto fiter = family_key_to_id_.find(fkey);
-	if (fiter == family_key_to_id_.end())
-	{
-	    /*
-	     * First occurrence of this family.
-	     * Assign an internal ID and initialize the full data entry.
-	     */
-	    boost::lock_guard<boost::mutex> guard(mtx_);
-
-	    fam_id = next_family_id_++;
-	    family_key_to_id_[fkey] = fam_id;
-
-	    family_data_.emplace(std::make_pair(fam_id, family_data_t { pgf, plf, genus_id, cols[5], fam_id, seqlen, 1 }));
+	    else
+	    {
+		plf += mapped_name->second;
+		genus_id = std::stoul(mapped_name->second);
+	    }
+	    plf += "_";
+	    plf += zeros.substr(0, 8 - cols[8].size());
+	    plf += cols[8];
+	    // encoded_id_t id = encode_id(cols[3]);
+	    encoded_id_t id = assign_new_peg_id(cols[3]);
 	    
+	    // assign unique key for for family
+	    family_key_t fkey(pgf, plf);
+	    encoded_family_id_t fam_id;
+	    
+	    unsigned long seqlen = std::stoul(cols[4]);
+	    auto fiter = family_key_to_id_.find(fkey);
+	    if (fiter == family_key_to_id_.end())
+	    {
+		/*
+		 * First occurrence of this family.
+		 * Assign an internal ID and initialize the full data entry.
+		 */
+		boost::lock_guard<boost::mutex> guard(mtx_);
+
+		/*
+		 * Recheck the hash in case someone else came through and updated.
+		 */
+		fiter = family_key_to_id_.find(fkey);
+		if (fiter == family_key_to_id_.end())
+		{
+		    fam_id = next_family_id_++;
+		    family_key_to_id_[fkey] = fam_id;
+		    
+		    family_data_.emplace(std::make_pair(fam_id, family_data_t { pgf, plf, genus_id, cols[5], fam_id, seqlen, 1 }));
+		}
+		else
+		{
+		    std::cerr << "Family map found on second check for " << pgf << " " << plf << "\n";
+		    fam_id = fiter->second;
+		    auto famit = family_data_.find(fam_id);
+		    if (famit == family_data_.end())
+		    {
+			std::cerr << "Fail: no family data found for " << fam_id << "\n";
+			abort();
+		    }
+		    famit->second.total_size += seqlen;
+		    famit->second.count++;
+		}
+		
 //	    std::cout << "assigned " << pgf << " " << plf << ": " << fam_id << "\n";
 //	    std::cout << fkey.first << " " << fkey.second << "\n";
-	}
-	else
-	{
-	    fam_id = fiter->second;
-	    auto famit = family_data_.find(fam_id);
-	    if (famit == family_data_.end())
-	    {
-		std::cerr << "Fail: no family data found for " << fam_id << "\n";
-		abort();
 	    }
-	    famit->second.total_size += seqlen;
-	    famit->second.count++;
-	}
-
-	// std::cerr << "fmap " << id << " " << fam_id << " " << plf << "\n";
-
-	peg_to_family_[id] = fam_id;
+	    else
+	    {
+		fam_id = fiter->second;
+		auto famit = family_data_.find(fam_id);
+		if (famit == family_data_.end())
+		{
+		    std::cerr << "Fail: no family data found for " << fam_id << "\n";
+		    abort();
+		}
+		famit->second.total_size += seqlen;
+		famit->second.count++;
+	    }
 	    
-    }
-
-    /*
-     * debug.
-     */
-    if (0)
-    {
-	for (auto it1: family_key_to_id_)
-	{
-	    auto key = it1.first;
-	    auto fam = it1.second;
-	    std::cout << key.first << " " << key.second << " " << " " << fam << "\n";
-
-	    family_data_t &dat = family_data_[fam];
-	    std::cout << dat.pgf << " " << dat.plf << " " << dat.function << " " << dat.total_size << "\n";
-	}
-	
-    }
+	    // std::cerr << "fmap " << id << " " << fam_id << " " << plf << "\n";
+	    
+	    peg_to_family_.insert(std::make_pair(id, fam_id));
+	    
+	});
 }
 
 void KmerPegMapping::dump_sizes(std::ostream &os)
@@ -522,7 +529,8 @@ void KmerPegMapping::write_kmer_distribution(std::ostream&os)
 	os << kmer << "\t" << entry.first << "\t" << counts.size();
 	if (counts.size() == 1)
 	{
-	    const family_data_t &fam = family_data_[counts.begin()->first];
+	    //const family_data_t &fam = family_data_[counts.begin()->first];
+	    const family_data_t &fam = family_data_[counts[0]];
 	    os << "\t" << fam.pgf << "\t" << fam.plf << "\t" << fam.function << "\n";
 	}
 	else

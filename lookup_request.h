@@ -27,6 +27,18 @@ private:
 	unsigned int hit_count;
 	unsigned int hit_total;
 	float weighted_total;
+
+	inline void increment(KmerPegMapping::encoded_family_id_t val, float weight) {
+	    hit_count++;
+	    hit_total++;
+	    weighted_total += weight;
+	}
+	    
+	inline void increment(std::pair<KmerPegMapping::encoded_family_id_t, unsigned int> val, float weight) {
+	    hit_count += val.second;
+	    hit_total++;
+	    weighted_total += weight;
+	}
     } ;
     std::unordered_map<KmerPegMapping::encoded_id_t, sequence_accumulated_score_t> seq_score_;
 

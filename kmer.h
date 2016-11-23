@@ -17,6 +17,7 @@
 #endif
 
 #include <boost/thread/mutex.hpp>
+#include <boost/program_options.hpp>
 
 class KmerPegMapping
 {
@@ -71,11 +72,12 @@ public:
     std::map<std::string, std::string> genus_map_;
 
 #ifdef USE_TBB
-    typedef std::unordered_map<encoded_family_id_t, unsigned int> family_counts_t;
+    // typedef std::unordered_map<encoded_family_id_t, unsigned int> family_counts_t;
     // typedef tbb::concurrent_unordered_map<encoded_family_id_t, unsigned int> family_counts_t;
 
     //typedef std::unordered_set<encoded_family_id_t> family_counts_t;
     //typedef tbb::concurrent_vector<encoded_family_id_t> family_counts_t;
+    typedef std::vector<encoded_family_id_t> family_counts_t;
     typedef tbb::concurrent_vector<encoded_id_t> id_set;
     typedef tbb::concurrent_unordered_map<encoded_kmer_t, id_set> map_type_t;
     typedef tbb::concurrent_unordered_map<encoded_kmer_t, family_counts_t> family_map_type_t;
@@ -99,9 +101,18 @@ public:
     tbb::spin_mutex tmtx_;
 
     // Peg ID mapping
-    encoded_id_t next_peg_id_;
+    tbb::atomic<encoded_id_t> next_peg_id_;
     peg_to_id_map_t peg_to_id_;
     id_to_peg_map_t id_to_peg_;
+
+    inline encoded_id_t assign_new_peg_id(const std::string &peg) {
+	encoded_id_t id = next_peg_id_++;
+	peg_to_id_[peg] = id;
+	id_to_peg_[id] = peg;
+	if (id % 1000000 == 0)
+	    std::cerr << "assigned " << peg << " " << id << "\n";
+	return id;
+    }
 
     // Family ID mapping
     encoded_family_id_t next_family_id_;
@@ -138,7 +149,7 @@ public:
 
     std::string decode_id(encoded_id_t id);
 
-    unsigned long kcount_;
+    tbb::atomic<unsigned long> kcount_;
     unsigned int next_genome_id_;
 
     void dump_sizes(std::ostream &os);

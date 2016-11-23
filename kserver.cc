@@ -7,6 +7,7 @@
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <fstream>
+#include <memory>
 #include "global.h"
 #include "kguts.h"
 
@@ -79,6 +80,17 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 	root_mapping_->reserve_mapping_space(count);
     }
 
+    int n_inserters = 1;
+    if (g_parameters->count("n-inserter-threads"))
+    {
+	n_inserters = (*g_parameters)["n-inserter-threads"].as<int>();
+    }
+
+    KmerInserter inserter(n_inserters, root_mapping_);
+    if (family_mode)
+    {
+	inserter.start();
+    }
     std::vector<NRLoader *> active_loaders;
 
     if (g_parameters->count("families-nr"))
@@ -88,7 +100,7 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 	{
 	    load_state_.pending_inc();
 	    std::cerr << "Queue load NR file " << file << "\n";
-	    NRLoader *loader = new NRLoader(load_state_, file, root_mapping_, thread_pool_, files.size(), family_mode_);
+	    NRLoader *loader = new NRLoader(load_state_, file, root_mapping_, thread_pool_, files.size(), family_mode_, inserter);
 	    active_loaders.push_back(loader);
 	    loader->start();
 	}
@@ -105,6 +117,11 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
 	// std::cerr << "remove loader for " << v->file_ << "\n";
 	delete v;
     }
+
+    /*
+     * When we are done, we need to clear the inserters.
+     */
+    inserter.stop();
 }
 
 /*
@@ -204,8 +221,11 @@ void KmerRequestServer::do_await_stop()
 NRLoader::NRLoader(NRLoadState &load_state, const std::string &file,
 		   std::shared_ptr<KmerPegMapping> root_mapping,
 		   std::shared_ptr<ThreadPool> thread_pool,
-		   size_t n_files, bool family_mode) :
+		   size_t n_files, bool family_mode,
+		   KmerInserter &inserter
+    ) :
     family_mode_(family_mode),
+    inserter_(inserter),
     load_state_(load_state),
     my_load_state_(file),
     file_(file),
@@ -297,7 +317,8 @@ void NRLoader::on_hit(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_i
     }
 }
 
-void NRLoader::on_hit_fam(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_family_id_t &enc_id, size_t seq_len)
+void NRLoader::on_hit_fam(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_family_id_t &enc_id,
+			  size_t seq_len)
 {
     root_mapping_->add_fam_mapping(enc_id, hit.hit.which_kmer);
 }
@@ -306,6 +327,10 @@ void NRLoader::on_hit_fam(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encod
 /*
  * Process a bucket of work in the worker thread.
  *
+ * If we are in family load mode, we collect a set of
+ * kmer=>family_id mappings to be inserted. In order to save synchronization overhead, we batch
+ * these up by encoded-kmer modulo n-insert-workers and at the end of a sequence push the
+ * work to the appropriate insert-worker input queue.
  */
 void NRLoader::thread_load(std::shared_ptr<KmerRequestServer::seq_list_t> sent_work, int count)
 {
@@ -320,18 +345,28 @@ void NRLoader::thread_load(std::shared_ptr<KmerRequestServer::seq_list_t> sent_w
 
 	    std::function<void(KmerGuts::hit_in_sequence_t)> hit_cb;
 
+	    std::vector<std::shared_ptr<KmerInserter::WorkElement>> insert_work_list;
+
 	    if (family_mode_)
 	    {
+		for (int i = 0; i < inserter_.n_workers(); i++)
+		    insert_work_list.emplace_back(std::make_shared<KmerInserter::WorkElement>());
+		
 		auto fam_id_iter = root_mapping_->peg_to_family_.find(enc_id);
 		if (fam_id_iter == root_mapping_->peg_to_family_.end())
 		{
 		    std::string dec = root_mapping_->decode_id(enc_id);
-		    std::cout << "NO FAM FOR " << id << " " << enc_id << " " << dec << "\n";
+		    std::cerr << "NO FAM FOR id='" << id << "' enc_id='" << enc_id << "' dec='" << dec << "'\n";
 		    my_load_state_.pending_dec();
 		    return;
 		}
 		KmerPegMapping::encoded_family_id_t fam_id = fam_id_iter->second;
-		hit_cb = std::bind(&NRLoader::on_hit_fam, this, std::placeholders::_1, fam_id, seq.length());
+		hit_cb = [this, insert_work_list, fam_id, enc_id](KmerGuts::hit_in_sequence_t hit)
+		{
+		    int modulus = (int) (hit.hit.which_kmer % (unsigned long long) inserter_.n_workers());
+		    insert_work_list[modulus]->work.emplace_back(std::make_pair(hit.hit.which_kmer, fam_id));
+		};
+		// hit_cb = std::bind(&NRLoader::on_hit_fam, this, std::placeholders::_1, fam_id, seq.length(), insert_work_list);
 	    }
 	    else
 	    {		   
@@ -339,6 +374,19 @@ void NRLoader::thread_load(std::shared_ptr<KmerRequestServer::seq_list_t> sent_w
 	    }
 
 	    kguts->process_aa_seq(id, seq, 0, hit_cb, 0);
+	    if (family_mode_)
+	    {
+		for (int i = 0; i < inserter_.n_workers(); i++)
+		{
+		    auto w = insert_work_list[i];
+
+		    if (w->work.size() > 0)
+		    {
+			inserter_.push_work(i, w);
+		    }
+		}
+	    }
+		
 	}
     }
     catch (std::exception &e)

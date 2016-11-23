@@ -28,7 +28,7 @@ const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(
  * $6 = fragment
  */
 const boost::regex mapping_path_regex("^/mapping/([^/]+)(/(add|matrix|lookup))$");
-const boost::regex genus_loookup_path_regex("^/genus_lookup/([^/]+)$");
+const boost::regex genus_lookup_path_regex("^/genus_lookup/([^/]+)$");
 
 KmerRequest2::KmerRequest2(std::shared_ptr<KmerRequestServer> server,
 			   boost::asio::io_service &io_service,
@@ -295,7 +295,7 @@ void KmerRequest2::process_request()
 	    respond(200, "OK", os.str(), [this](){});
 
 	}
-	else if (boost::regex_match(path_, match, genus_loookup_path_regex))
+	else if (boost::regex_match(path_, match, genus_lookup_path_regex))
 	{
 	    std::string genus = match[1];
 
