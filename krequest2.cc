@@ -495,8 +495,9 @@ void KmerRequest2::respond(int code, const std::string &status, const std::strin
     os << "Content-length: " << result.size() << "\n";
     os << "\n";
 
-    std::vector<boost::asio::const_buffer> bufs;
-    bufs.push_back(boost::asio::buffer(os.str()));
+    std::vector<boost::asio::const_buffer> bufs; 
+    std::string s(os.str());
+    bufs.push_back(boost::asio::buffer(s));
     bufs.push_back(boost::asio::buffer(result));
 
     //
