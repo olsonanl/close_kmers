@@ -20,7 +20,9 @@ void FastaParser::parse(std::istream &stream)
     init_parse();
     while (stream.get(c))
     {
-	parse_char(c);
+	bool ok = parse_char(c);
+	if (!ok)
+	    break;
     }
     parse_complete();
 }

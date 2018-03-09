@@ -164,7 +164,7 @@ xx: xx.o
 tkguts: tkguts.o kguts.o kmer_image.o 
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
-parse_fasta: parse_fasta.o fasta_parser.o
+validate_fasta: validate_fasta.o fasta_parser.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 tt: tt.o

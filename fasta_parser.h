@@ -26,11 +26,16 @@ public:
     void set_def_callback(std::function<int(const std::string &id, const std::string &def, const std::string &seq)> on_seq) {
 	on_def_seq_ = on_seq;
     }
-	    
+
+    void set_error_callback(std::function<bool(const std::string &err, int line, const std::string id)> cb)
+    {
+	on_error_ = cb;
+    }
 
     void parse(std::istream &stream);
     void init_parse();
-    inline void parse_char(char c)
+    // return true to continue parsing
+    inline bool parse_char(char c)
     {
 	/*
 	  std::cout << "top " << c << " " << (0+cur_state_) << std::endl;
@@ -127,8 +132,12 @@ public:
 	if (!err.empty())
 	{
 	    std::cerr << "Error found: " << err << " at line " << line_number << " id='" << cur_id_ << "'" << std::endl;
-	    return;
+	    if (on_error_)
+	    {
+		return on_error_(err, line_number, cur_id_);
+	    }
 	}
+	return true;
     }
 
     void parse_complete();
@@ -142,7 +151,7 @@ private:
     
     std::function<int(const std::string &id, const std::string &seq)> on_seq_;
     std::function<int(const std::string &id, const std::string &def, const std::string &seq)> on_def_seq_;
-
+    std::function<bool(const std::string &err, int line, const std::string id)> on_error_;
     void call_callback()
     {
 	if (on_seq_)
