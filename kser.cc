@@ -47,6 +47,7 @@ int main(int argc, char* argv[])
     std::string pid_file;
     std::string kmer_family_distribution_file;
     bool no_listen;
+    std::string family_reps;
     
     desc.add_options()
 	("help,h", "show this help message")
@@ -63,6 +64,7 @@ int main(int argc, char* argv[])
 	("families-file", po::value<std::string>(), "families file")
 	("families-nr", po::value<std::vector<std::string>>()->multitoken(), "families NR data")
 	("families-version", po::value<std::string>(), "families data version string")
+	("family-reps", po::value<std::string>(&family_reps), "family representative pegs")
 	("kmer-family-distribution-file", po::value<std::string>(&kmer_family_distribution_file), "kmer family distribution logfile")
 	("reserve-mapping", po::value<unsigned long>(), "Reserve this much space in global mapping table")
 	("no-populate-mmap", po::bool_switch(), "Don't populate mmap data at startup")
@@ -248,6 +250,32 @@ int main(int argc, char* argv[])
 	kmer_family_distribution_stream.open(kmer_family_distribution_file);
     }
 
+
+    //
+    // Load family reps if in use
+    //
+
+    std::shared_ptr<FamilyReps> reps = 0;
+    if (family_reps.size())
+    {
+	reps = std::make_shared<FamilyReps>();
+	path reps_path(family_reps);
+	if (is_directory(reps_path))
+	{
+	    reps->load_reps_directory(reps_path);
+	}
+	else if (is_regular_file(reps_path))
+	{
+	    reps->load_reps_file(reps_path);
+	}
+	else
+	{
+	    std::cerr << "Invalid family reps file " << reps_path << "\n";
+	    exit(1);
+	}
+	
+    }
+
     boost::asio::io_service io_service;
 
     std::shared_ptr<ThreadPool> tp = std::make_shared<ThreadPool>(kmer_data);
@@ -267,6 +295,9 @@ int main(int argc, char* argv[])
     end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_seconds = end - start;
     std::cerr << "family load time " << elapsed_seconds.count() << "\n";
+
+    if (reps)
+	kserver->set_family_reps(reps);
 
     if (!kmer_family_distribution_file.empty())
     {

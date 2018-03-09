@@ -313,13 +313,27 @@ void RenumberState::phase_1_body(const std::string &fam, std::vector<std::string
 
 	    log_result(ss.str());
 
-	    auto nfam = vec[0].first;
+	    /*
+	     * On a split, we propagate the first name and allocate
+	     * new names for the rest.
+	     */
+
+	    auto fiter = vec.begin();
+	    auto nfam = fiter->first;
+	    new_fam_name_[nfam] = fam;
 	    old_fam_used_[fam] = nfam;
-	    for (auto x: vec)
+	    fiter++;
+
+	    std::string res = nfam + " NOW " + fam + "\n";
+	    log_result(res);
+
+	    while (fiter != vec.end())
 	    {
-		new_fam_name_[x.first] = fam;
-		std::string res = x.first + " NOW " + fam + "\n";
+		std::string nm = allocate_new_id();
+		new_fam_name_[fiter->first] = nm;
+		std::string res = fiter->first + " NOW " + nm + "\n";
 		log_result(res);
+		fiter++;
 	    }
 	}
     }
@@ -597,6 +611,9 @@ int main(int argc, char* argv[])
     }
 
     BasicConfigurator::configure();
+
+    logger->setLevel(Level::getWarn());
+    
     if (debug_level)
 	logger->setLevel(Level::getDebug());
     if (info_level)
@@ -645,8 +662,8 @@ int main(int argc, char* argv[])
     if (log_file != "")
 	renumber.set_logfile(log_file);
 
-    std::cout << "Old data:\n" << old_fam_data;
-    std::cout << "New data:\n" << new_fam_data;
+    // std::cout << "Old data:\n" << old_fam_data;
+    // std::cout << "New data:\n" << new_fam_data;
 
     
     renumber.phase_1();

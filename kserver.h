@@ -18,6 +18,7 @@
 #include "krequest2.h"
 #include "threadpool.h"
 #include "tbb/atomic.h"
+#include "family_reps.h"
 
 class NRLoadState
 {
@@ -78,6 +79,8 @@ public:
     bool family_mode() { return family_mode_; }
 
     std::shared_ptr<KmerPegMapping> root_mapping() { return root_mapping_; }
+    std::shared_ptr<FamilyReps> family_reps() { return family_reps_; }
+    void set_family_reps(std::shared_ptr<FamilyReps> reps) { family_reps_ = reps; }
 
 private:
     bool family_mode_;
@@ -96,6 +99,8 @@ private:
 
     std::shared_ptr<std::map<std::string, std::shared_ptr<KmerPegMapping>>> mapping_map_;
     std::shared_ptr<KmerPegMapping> root_mapping_;
+
+    std::shared_ptr<FamilyReps> family_reps_;
 
     /*
      * NR loading support.

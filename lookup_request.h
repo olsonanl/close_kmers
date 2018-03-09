@@ -49,6 +49,7 @@ private:
     enum { best_by_accumulation, best_by_count, best_by_weighted_count } best_match_method_;
     std::string target_genus_;
     unsigned long target_genus_id_;
+    bool find_reps_;
     
     typedef std::vector<ProteinSequence> work_list_t;
     std::shared_ptr<work_list_t> current_work_;

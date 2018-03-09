@@ -63,6 +63,9 @@ public:
     void write_header(std::ostream &os, int code, const std::string &status);
 
     void exit_request();
+
+    std::shared_ptr<KmerRequestServer> server() { return server_; }
+
 private:
 
     void read_initial_line(boost::system::error_code err, size_t bytes);

@@ -35,7 +35,8 @@ LookupRequest::LookupRequest(std::shared_ptr<KmerRequest2> owner, std::shared_pt
     allow_ambiguous_functions_(false),
     best_match_method_(best_by_accumulation),
     target_genus_(owner->parameters()["target_genus"]),
-    target_genus_id_(0)
+    target_genus_id_(0),
+    find_reps_(false)
 {
     parser_.set_callback(std::bind(&LookupRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2));
     try {
@@ -43,6 +44,9 @@ LookupRequest::LookupRequest(std::shared_ptr<KmerRequest2> owner, std::shared_pt
     } catch (const std::invalid_argument& ia) {}
     try {
 	find_best_match_ = std::stoi(owner->parameters()["find_best_match"]);
+    } catch (const std::invalid_argument& ia) {}
+    try {
+	find_reps_ = std::stoi(owner->parameters()["find_reps"]);
     } catch (const std::invalid_argument& ia) {}
     try {
 	allow_ambiguous_functions_ = std::stoi(owner->parameters()["allow_ambiguous_functions"]);
@@ -345,6 +349,23 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 				    auto fent = mapping_->family_data_[eid];
 				    float scaled = (float) score / (float) fent.total_size;
 				    os << score << "\t" << total << "\t" << weighted << "\t" << fent.pgf << "\t" << fent.plf << "\t" << fent.total_size << "\t" << fent.count << "\t" << scaled << "\t" << fent.function << "\n";
+				    if (find_reps_)
+				    {
+					auto reps = owner_->server()->family_reps();
+					if (reps)
+					{
+					    auto rep_it = reps->reps_.find(fent.plf);
+					    if (rep_it != reps->reps_.end())
+					    {
+						for (auto rep: rep_it->second)
+						{
+						    os << rep.feature_id << "\t" << rep.contig << "\t" << rep.contig_length << "\t" << rep.start << "\t"
+						       << rep.end << "\t" << rep.strand << "\n";
+						}
+					    }
+					}
+					os << "///\n";
+				    }
 				}
 				else
 				{
@@ -356,9 +377,13 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 				    if (fhit != mapping_->peg_to_family_.end())
 				    {
 					auto fam = mapping_->family_data_[fhit->second];
-					os << "\t" << fam.pgf << "\t" << fam.plf << "\t" << fam.function;
+					os << "\t" << fam.pgf << "\t" << fam.plf << "\t" << fam.function << "\n";
+
 				    }
-				    os << "\n";
+				    else
+				    {
+					os << "\n";
+				    }
 				}
 			    }
 			    os << "//\n";
