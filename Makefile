@@ -1,7 +1,9 @@
 
 ifeq ($(wildcard /Library),) 
 
-BUILD_TOOLS = /disks/patric-common/runtime/gcc-4.9.3
+BUILD_TOOLS = /disks/patric-common/runtime/gcc-4.9.4
+PATH := $(BUILD_TOOLS)/bin:$(PATH)
+export PATH
 
 #CXX = /opt/rh/devtoolset-2/root/usr/bin/g++
 CXX = $(BUILD_TOOLS)/bin/g++
@@ -21,7 +23,7 @@ endif
 
 default: kser
 
-BUILD_DEBUG = 0
+BUILD_DEBUG = 1
 
 ifeq ($(BUILD_DEBUG),1)
 OPT = -g
@@ -167,6 +169,9 @@ tkguts: tkguts.o kguts.o kmer_image.o
 validate_fasta: validate_fasta.o fasta_parser.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
+validate_fastq: validate_fastq.o fastq_parser.o trans_table.o dna_seq.o
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+
 tt: tt.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
@@ -211,6 +216,7 @@ add_request.o: kguts.h kmer_image.h fasta_parser.h klookup2.h klookup3.h
 add_request.o: threadpool.h numa.h md5.h
 family_reps.o: family_reps.h
 fasta_parser.o: fasta_parser.h
+fastq_parser.o: fastq_parser.h
 kc.o: kmer.h kserver.h kmer_inserter.h krequest2.h klookup.h kguts.h
 kc.o: kmer_image.h fasta_parser.h klookup2.h klookup3.h compute_request.h
 kc.o: threadpool.h numa.h family_reps.h
@@ -249,6 +255,9 @@ query_request.o: query_request.h compute_request.h krequest2.h kmer.h
 query_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
 query_request.o: klookup3.h threadpool.h numa.h
 threadpool.o: threadpool.h kmer_image.h kguts.h numa.h
+trans_table.o: trans_table.h
 tst_family_reps.o: family_reps.h
 unique_prots.o: global.h kguts.h kmer_image.h fasta_parser.h
+validate_fasta.o: fasta_parser.h
+validate_fastq.o: fastq_parser.h trans_table.h dna_seq.h
 x.o: kguts.h kmer_image.h
