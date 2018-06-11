@@ -18,7 +18,16 @@ void parallel_read(const std::string &file, int n_threads, Callback cb)
     is.seekg(0, is.end);
     size_t fsize = is.tellg();
 
-    size_t chunk_size = (size_t) ceil((float) fsize / (float) (n_threads - 1));
+    size_t chunk_size;
+
+    if (n_threads == 1)
+    {
+	chunk_size = fsize;
+    }
+    else
+    {
+	chunk_size = (size_t) ceil((float) fsize / (float) (n_threads - 1));
+    }
     std::cerr << "size=" << fsize << " chunk=" << chunk_size << "\n";
 
     boost::thread_group pool;

@@ -44,6 +44,9 @@ public:
 	*/
 	if (c == '\n')
 	    line_number++;
+	if (c == '\r')
+	    return true;
+	
 	std::string err;
 	switch (cur_state_)
 	{
@@ -91,7 +94,7 @@ public:
 		cur_state_ = s_id_or_data;
 
 	    }
-	    else if (isalpha(c))
+	    else if (isalpha(c) || c == '*')
 	    {
 		cur_seq_.push_back(c);
 	    }

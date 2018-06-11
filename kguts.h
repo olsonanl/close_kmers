@@ -262,12 +262,25 @@ public:
     long long size_hash; /* 1400303159  tot_lookups=13474100 retry=2981020 for 5.contigs 4.684 sec */
     /* 2147483648  tot_lookups=13474100 retry=1736650  */
     /* 1073741824  tot_lookups=13474100 retry=4728020  */
-    int write_mem_map;
     
     hit_t hits[MAX_HITS_PER_SEQ]; 
     int   num_hits;
     struct otu_count oI_counts[OI_BUFSZ];
     int num_oI;
+
+    /*
+     * Count used for loading.
+     */
+    long long kmers_loaded_;
+    kmer_memory_image_t *kmer_image_for_loading_;
+    unsigned long long image_size_for_loading_;
+    sig_kmer_t *sig_kmers_for_loading_;
+
+    void insert_kmer(const std::string &kmer,
+		     int function_index, int otu_index, unsigned short avg_offset,
+		     float function_weight);
+    void save_kmer_hash_table(const std::string &file);
+     
     
     unsigned int   current_fI;
     char  current_id[300];
@@ -294,18 +307,20 @@ public:
     kmer_handle_t *kmersH;
 
     KmerGuts(const std::string &kmer_dir, std::shared_ptr<KmerImage> image);
+    KmerGuts(const std::string &kmer_dir, long long num_buckets);
+    void do_init();
 
     unsigned char to_amino_acid_off(char c);
     char comp(char c);
     void rev_comp(const char *data,char *cdata);
     unsigned long long encoded_kmer(unsigned char *p);
-    unsigned long long encoded_aa_kmer(char *p);
+    unsigned long long encoded_aa_kmer(const char *p);
     static void decoded_kmer(unsigned long long encodedK,char *decoded);
     int dna_char(char c);
     void translate(const char *seq,int off,char *pseq, unsigned char *pIseq);
-    char **load_indexed_ar(char *filename,int *sz);
-    char **load_functions(char *file, int *sz);
-    char **load_otus(char *file, int *sz);
+    char **load_indexed_ar(const char *filename,int *sz);
+    char **load_functions(const char *file, int *sz);
+    char **load_otus(const char *file, int *sz);
     long long find_empty_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK);
     long long lookup_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK);
     kmer_memory_image_t *load_raw_kmers(char *file,unsigned long long num_entries, unsigned long long *alloc_sz);
@@ -335,7 +350,6 @@ public:
 			std::shared_ptr<KmerOtuStats> otu_stats);
 
     kmer_handle_t *init_kmers(const char *dataD);
-    static kmer_memory_image_t *map_image_file(const std::string &data_dir, size_t &image_size);
 
     std::shared_ptr<KmerImage> image_;
 

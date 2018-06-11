@@ -50,18 +50,97 @@ KmerGuts::KmerGuts(const std::string &data_dir, std::shared_ptr<KmerImage> image
     aa = 0;
     hits_only = 0;
     size_hash = image->image()->num_sigs;
-    write_mem_map = 0;
 
     num_hits = 0;
     num_oI = 0;
 
     set_default_parameters();
 
+    do_init();
+}
+
+void KmerGuts::do_init()
+{
     pIseq = (unsigned char *) malloc(MAX_SEQ_LEN / 3);
     cdata = (char *) malloc(MAX_SEQ_LEN);
     data = (char *) malloc(MAX_SEQ_LEN);
     pseq = (char *) malloc(MAX_SEQ_LEN / 3);
 
+}
+
+/*
+ * Alternative constructor used for loading hash table from
+ * kmers and saving to disk.
+ */
+KmerGuts::KmerGuts(const std::string &data_dir, long long num_buckets) :
+    size_hash(num_buckets),
+    kmers_loaded_(0),
+    image_(0)
+{
+
+    /*
+     * Initialize our image pointer using the num_buckets passed in.
+     *
+     * This is code hoisted from the original init_kmer call. We make
+     * the operation of writing hash tables explicit.
+     */
+
+    unsigned long long image_size = sizeof(kmer_memory_image_t) + (sizeof(sig_kmer_t) * num_buckets);
+    kmer_memory_image_t *image = static_cast<kmer_memory_image_t *>(malloc(image_size));
+    image->num_sigs = num_buckets;
+    image->entry_size = sizeof(sig_kmer_t);
+    image->version = (long long) KMER_VERSION;
+
+    kmer_handle_t *handle = new kmer_handle_t;
+    handle->kmer_table = (sig_kmer_t *) (image + 1);
+    handle->num_sigs   = image->num_sigs;
+
+    kmersH = handle;
+
+    sig_kmer_t *sig_kmers = (sig_kmer_t *) (image + 1);
+
+    for (long long i =0; (i < size_hash); i++)
+	sig_kmers[i].which_kmer = MAX_ENCODED + 1;
+
+    kmer_image_for_loading_ = image;
+    sig_kmers_for_loading_ = sig_kmers;
+    image_size_for_loading_ = image_size;
+
+    do_init();
+}
+
+void KmerGuts::insert_kmer(const std::string &kmer,
+			   int function_index, int otu_index, unsigned short avg_offset,
+			   float function_weight)
+{
+    unsigned long long encodedK = encoded_aa_kmer(kmer.c_str());
+    if (encodedK > MAX_ENCODED)
+    {
+	// std::cerr << "Warn: " << kmer << " contains invalid characters\n";
+	return;
+    }
+    long long hash_entry = find_empty_hash_entry(sig_kmers_for_loading_, encodedK);
+    kmers_loaded_++;
+    if (kmers_loaded_ >= (size_hash / 2)) {
+	fprintf(stderr,"Your Kmer hash is half-full; use -s (and -w) to bump it\n");
+	exit(1);
+    }
+    sig_kmers_for_loading_[hash_entry].which_kmer     = encodedK;
+    sig_kmers_for_loading_[hash_entry].avg_from_end   = avg_offset;
+    sig_kmers_for_loading_[hash_entry].function_index = function_index;
+    sig_kmers_for_loading_[hash_entry].otu_index      = otu_index;
+    sig_kmers_for_loading_[hash_entry].function_wt    = function_weight;
+}
+
+void KmerGuts::save_kmer_hash_table(const std::string &file)
+{
+    FILE *fp = fopen(file.c_str(),"w");
+    if (fp == NULL) { 
+	fprintf(stderr,"could not open %s for writing: %s ",file.c_str(), strerror(errno));
+	exit(1);
+    }
+    fwrite(kmer_image_for_loading_, image_size_for_loading_, 1, fp);
+    fclose(fp);
 }
 
 void KmerGuts::set_default_parameters()
@@ -267,6 +346,7 @@ void KmerGuts::rev_comp(const char *data,char *cdata) {
 }
 
 unsigned long long KmerGuts::encoded_kmer(unsigned char *p) {
+//    std::cout << "encode '" << p << "'\n";
   unsigned long long encodedK = *p;
   int i;
   for (i=1; (i <= KMER_SIZE-1); i++) {
@@ -284,13 +364,18 @@ unsigned long long KmerGuts::encoded_kmer(unsigned char *p) {
   return encodedK;
 }
 
-unsigned long long KmerGuts::encoded_aa_kmer(char *p)
+unsigned long long KmerGuts::encoded_aa_kmer(const char *p)
 {
     unsigned char aa_off[KMER_SIZE];
     int j;
     for (j=0; (j < KMER_SIZE); j++) {
 	char prot_c = *(p+j);
 	aa_off[j] = to_amino_acid_off(prot_c);
+	/*
+	 * If we have an invalid char, return an invalid encoding.
+	 */
+	if (aa_off[j] >= 20)
+	    return MAX_ENCODED + 1;
     }
     return encoded_kmer(aa_off);
 }
@@ -366,7 +451,7 @@ void KmerGuts::translate(const char *seq,int off,char *pseq, unsigned char *pIse
 #define MAX_FUNC_OI_INDEX 1000000
 #define MAX_FUNC_OI_VALS  100000000
 
-char **KmerGuts::load_indexed_ar(char *filename,int *sz) {
+char **KmerGuts::load_indexed_ar(const char *filename,int *sz) {
     char **index_ar = (char **) malloc(MAX_FUNC_OI_INDEX * sizeof(char *));
     char *vals      = (char *)malloc(MAX_FUNC_OI_VALS);
   char *p         = vals;
@@ -398,11 +483,11 @@ char **KmerGuts::load_indexed_ar(char *filename,int *sz) {
   return index_ar;
 }
 
-char **KmerGuts::load_functions(char *file, int *sz) {
+char **KmerGuts::load_functions(const char *file, int *sz) {
   return load_indexed_ar(file,sz);
 }
 
-char **KmerGuts::load_otus(char *file, int *sz) {
+char **KmerGuts::load_otus(const char *file, int *sz) {
   return load_indexed_ar(file,sz);
 }
 
@@ -486,11 +571,12 @@ kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long long num_
   return image;
 }
 
-KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
-    kmer_handle_t *handle = (kmer_handle_t *) malloc(sizeof(kmer_handle_t));
-
+KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD)
+{
+    kmer_handle_t *handle = new kmer_handle_t;
+    
     kmer_memory_image_t *image = image_->image();
-
+    
     char file[300];
     strcpy(file,dataD);
     strcat(file,"/function.index");
@@ -500,52 +586,15 @@ KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD) {
      strcat(file,"/otu.index");
      handle->otu_array      = load_otus(file, &handle->otu_count);
 
-     char fileM[300];
-     strcpy(fileM,dataD);
-     strcat(fileM,"/kmer.table.mem_map");
-
-     if (write_mem_map) {
-	 // unsigned long long sz, table_size;
-	 strcpy(file,dataD);
-	 strcat(file,"/final.kmers");
-
-	 unsigned long long image_size;
-
-	 image = load_raw_kmers(file, size_hash, &image_size);
-
-
-	 handle->kmer_table = (sig_kmer_t *) (image + 1);
-	 handle->num_sigs   = image->num_sigs;
-
-	 FILE *fp = fopen(fileM,"w");
-	 if (fp == NULL) { 
-	     fprintf(stderr,"could not open %s for writing: %s ",fileM, strerror(errno));
-	     exit(1);
-	 }
-	 fwrite(image, image_size, 1, fp);
-	 fclose(fp);
-
-	 /*
-	  * Strike this as these were uninitialized and wrote as zero in the original kmer_guts.c code.
-	  *
-	 strcpy(fileM,dataD);
-	 strcat(fileM,"/size_hash.and.table_size");
-	 fp = fopen(fileM,"w");
-	 fprintf(fp,"%lld\t%lld\n",sz,table_size);
-	 fclose(fp);
-	 */
-     }
-     else {
-	 size_hash = image->num_sigs;
-	 handle->num_sigs = size_hash;
-	 handle->kmer_table = (sig_kmer_t *) (image + 1);
-	 // std::cerr << "loaded; size_hash=" << size_hash << "\n";
-     }
+     size_hash = image->num_sigs;
+     handle->num_sigs = size_hash;
+     handle->kmer_table = (sig_kmer_t *) (image + 1);
+     // std::cerr << "loaded; size_hash=" << size_hash << "\n";
      return handle;
- }
+}
 
 
- void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
+void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
 
    if (KMER_SIZE == 5) {
      while (((*p) < bound) &&

@@ -5,6 +5,9 @@
 
 #define KMER_VERSION 1
 
+/*
+ * num_sigs is the number of buckets in the hash table.
+ */
 typedef struct kmer_memory_image {
     unsigned long long num_sigs;
     unsigned long long entry_size;
