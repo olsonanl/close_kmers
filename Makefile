@@ -71,8 +71,8 @@ OPT = -g -O3 -DTBB_USE_THREADING_TOOLS -fno-omit-frame-pointer $(UFLAGS)
 
 else
 
-#OPT = -O3
-OPT = -O -g -DGLIBCXX_FORCE_NEW
+OPT = -O3
+#OPT = -O -g -DGLIBCXX_FORCE_NEW
 #OPT = -O2 -pg
 #OPT = -g -O3
 

@@ -31,6 +31,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 #include <boost/thread/tss.hpp>
+#include <boost/thread/thread.hpp>
 
 #include "seed_utils.h"
 #include "operators.h"
@@ -120,10 +121,10 @@ inline std::ostream &operator<<(std::ostream &os, const Kmer &k)
 
 struct KmerStatistics
 {
-    int distinct_signatures = 0;
-    std::unordered_map<int, int> distinct_functions;
-    std::unordered_map<int, int> seqs_with_func;
-    std::unordered_set<int> seqs_with_a_signature;
+    tbb::atomic<int> distinct_signatures = 0;
+    tbb::concurrent_unordered_map<int, int> distinct_functions;
+    tbb::concurrent_unordered_map<int, int> seqs_with_func;
+    tbb::concurrent_unordered_set<int> seqs_with_a_signature;
 };
 
 //
@@ -152,15 +153,86 @@ struct KeptKmer
     float weight;
 };
 
-std::vector<KeptKmer> kept_kmers;
+tbb::concurrent_vector<KeptKmer> kept_kmers;
 
 struct KmerSet
 {
+    KmerSet() : count(0) {}
+    void reset() {
+	count = 0;
+	func_count.clear();
+	set.clear();
+    }
+    // ~KmerSet() { std::cerr << "destroy " << this << "\n"; }
     Kmer kmer;
     std::map<int, int> func_count;
     int count;
     std::vector<KmerAttributes> set;
 };
+
+inline std::ostream &operator<<(std::ostream &os, const KmerSet &ks)
+{
+    os << "KmerSet: kmer=" << ks.kmer << " count=" << ks.count << "\n";
+    return os;
+}
+
+void process_set(KmerSet &set);
+typedef std::vector<KmerSet> KmerSetList;
+typedef std::shared_ptr<KmerSetList> KmerSetListPtr;
+
+struct KmerProcessor
+{
+    KmerProcessor(int n) : n_threads(n) {}
+    boost::thread_group thread_pool;
+    tbb::concurrent_bounded_queue<KmerSetListPtr> queue;
+    int n_threads;
+    void start() {
+	for (int i = 0; i < n_threads; i++)
+	{
+	    std::cerr << "starting " << i << "\n";
+	    thread_pool.create_thread([this, i]() {
+		    thread_main(i);
+		});
+	}
+    }
+    void stop() {
+	for (int i = 0; i < n_threads; i++)
+	{
+	    std::cerr << "stopping " << i << "\n";
+	    KmerSetListPtr work = std::make_shared<KmerSetList>();
+	    enqueue_work(work);
+	}
+	std::cerr << "Awaiting threads\n";
+	thread_pool.join_all();
+    }
+	
+    void enqueue_work(KmerSetListPtr work) {
+	queue.push(work);
+    }
+    void thread_main(int i) {
+	std::cerr << "running " << i << "\n";
+	int sp = 0;
+	while (1)
+	{
+	    KmerSetListPtr work;
+	    queue.pop(work);
+	    if (work->size() == 0)
+	    {
+		std::cerr << "shutting down " << i << "\n";
+		break;
+	    }
+
+	    for (auto entry: *work)
+	    {
+		// std::cerr << i << " process " << entry << "\n";
+		sp++;
+		process_set(entry);
+	    }
+	}
+	std::cerr << "thread " << i << " processed " << sp << " sets\n";
+    }
+};
+KmerProcessor *g_kmer_processor;
 
 /*
  * Manage the ID to function mapping.
@@ -542,23 +614,21 @@ void load_fasta(FunctionMap &fm, KmerAttributeMap &m, unsigned file_number, cons
     parser.parse_complete();
 }
 
-void process_set(Kmer &kmer, std::map<int, int> &func_count, int count, std::vector<KmerAttributes> &set)
+void enqueue_set(KmerSetListPtr set_list)
 {
-    /*
-    if (count < 2)
-    {
-    rejected_stream << kmer << " count=" << count << "\n";
-	return;
-    }
-    */
+    g_kmer_processor->enqueue_work(set_list);
+}
 
-    auto elt = std::max_element(func_count.begin(), func_count.end(),
+void process_set(KmerSet &set)
+//void process_set(Kmer &kmer, std::map<int, int> &func_count, int count, std::vector<KmerAttributes> &set)
+{
+    auto elt = std::max_element(set.func_count.begin(), set.func_count.end(),
 				[](auto a, auto b) { return a.second < b.second; });
 
     int best_func = elt->first;
     int best_count = elt->second;
 
-    float thresh = float(count) * 0.8;
+    float thresh = float(set.count) * 0.8;
 
     /*
     kept_stream << "Process set for " << kmer << " best=" << best_func << " best_count=" << best_count << " count=" << count << " thresh=" << thresh << "\n";
@@ -578,7 +648,7 @@ void process_set(Kmer &kmer, std::map<int, int> &func_count, int count, std::vec
     int seqs_containing_func = 0;
     std::vector<int> offsets;
 
-    for (auto item: set)
+    for (auto item: set.set)
     {
 	if (item.func_index == best_func)
 	{
@@ -594,18 +664,24 @@ void process_set(Kmer &kmer, std::map<int, int> &func_count, int count, std::vec
     kmer_stats.distinct_signatures++;
     kmer_stats.distinct_functions[best_func]++;
 
-    kept_kmers.emplace_back(KeptKmer { kmer, median_offset, best_func, -1,
-				       (int) set.size(), seqs_containing_func });
+    kept_kmers.push_back(KeptKmer { set.kmer, median_offset, best_func, -1,
+				       (int) set.set.size(), seqs_containing_func });
 }
 
 
 void process_kmers(KmerAttributeMap &m)
 {
-    std::map<int, int> func_count;
-    std::vector<KmerAttributes> set;
-    int count = 0;
+    //std::map<int, int> func_count;
+    //std::vector<KmerAttributes> set;
+    //int count = 0;
     Kmer cur { 0 } ;
     
+    KmerSetListPtr cur_set_list = std::make_shared<KmerSetList>();
+    cur_set_list->emplace_back(KmerSet());
+//    KmerSet cur_set;
+
+    int sets_pushed = 0;
+	
     for (auto ent: m)
     {
 	const Kmer &kmer = ent.first;
@@ -613,20 +689,112 @@ void process_kmers(KmerAttributeMap &m)
 
 	if (kmer != cur)
 	{
-	    if (count > 0)
-		process_set(cur, func_count, count, set);
-	    func_count.clear();
-	    set.clear();
-	    count = 0;
+	    if (cur_set_list->back().count > 0)
+	    {
+		sets_pushed++;
+		if (cur_set_list->size() > 200000)
+		{
+		    /*
+		    std::cerr << "push setlist size " << cur_set_list->size() << "\n";
+		    for (auto x: *cur_set_list)
+		    {
+			std::cerr << "  " << x;
+		    }
+		    */
+		    enqueue_set(cur_set_list);
+		    cur_set_list = std::make_shared<KmerSetList>();
+		}
+		cur_set_list->emplace_back(KmerSet());
+	    }
+	    //cur_set.reset();
+	    cur_set_list->back().kmer = kmer;
 	    cur = kmer;
 	}
-
-	func_count[attr.func_index]++;
-	count++;
-	set.emplace_back(attr);
+	KmerSet &s = cur_set_list->back();
+	s.func_count[attr.func_index]++;
+	s.count++;
+	s.set.emplace_back(attr);
     }
-    process_set(cur, func_count, count, set);
+    sets_pushed++;
+//    cur_set_list->emplace_back(cur_set);
+    enqueue_set(cur_set_list);
+    std::cout << "done, pushed " << sets_pushed << " sets\n";
+}
+
+void par_process_kmers(KmerAttributeMap &m)
+{
+    tbb::parallel_for(m.range(), [](auto r) {
+	    KmerSet cur_set;
+	    Kmer cur { 0 };
+	    for (auto ent = r.begin(); ent != r.end(); ent++)
+	    {
+		const Kmer &kmer = ent->first;
+		KmerAttributes &attr = ent->second;
+
+		if (kmer != cur)
+		{
+		    if (cur_set.count > 0)
+			process_set(cur_set);
+		    
+		    cur_set.reset();
+		    cur_set.kmer = kmer;
+		    cur = kmer;
+		}
+		cur_set.func_count[attr.func_index]++;
+		cur_set.count++;
+		cur_set.set.emplace_back(attr);
+	    }
+	    process_set(cur_set);
+	});
+}
+
+void process_kmer_block(KmerAttributeMap &m)
+{
+    Kmer cur { 0 } ;
     
+    KmerSetListPtr cur_set_list = std::make_shared<KmerSetList>();
+    cur_set_list->emplace_back(KmerSet());
+//    KmerSet cur_set;
+
+    int sets_pushed = 0;
+	
+    for (auto ent: m)
+    {
+	const Kmer &kmer = ent.first;
+	KmerAttributes &attr = ent.second;
+
+	if (kmer != cur)
+	{
+	    if (cur_set_list->back().count > 0)
+	    {
+		sets_pushed++;
+		if (cur_set_list->size() > 200000)
+		{
+		    /*
+		    std::cerr << "push setlist size " << cur_set_list->size() << "\n";
+		    for (auto x: *cur_set_list)
+		    {
+			std::cerr << "  " << x;
+		    }
+		    */
+		    enqueue_set(cur_set_list);
+		    cur_set_list = std::make_shared<KmerSetList>();
+		}
+		cur_set_list->emplace_back(KmerSet());
+	    }
+	    //cur_set.reset();
+	    cur_set_list->back().kmer = kmer;
+	    cur = kmer;
+	}
+	KmerSet &s = cur_set_list->back();
+	s.func_count[attr.func_index]++;
+	s.count++;
+	s.set.emplace_back(attr);
+    }
+    sets_pushed++;
+//    cur_set_list->emplace_back(cur_set);
+    enqueue_set(cur_set_list);
+    std::cout << "done, pushed " << sets_pushed << " sets\n";
 }
 
 void compute_weight_of_signature(KeptKmer &kk)
@@ -648,7 +816,7 @@ void write_function_index(const std::string &dir, FunctionMap &fm)
     fm.write_function_index(dir);
 }
 
-KmerGuts *write_hashtable(const std::string &dir, std::vector<KeptKmer> &kmers)
+KmerGuts *write_hashtable(const std::string &dir, tbb::concurrent_vector<KeptKmer> &kmers)
 {
     std::vector<unsigned long> primes {3769,6337,12791,24571,51043,101533,206933,400187,
 	    821999,2000003,4000037,8000009,16000057,32000011,
@@ -750,8 +918,10 @@ void recall_fasta(FunctionMap &fm, const fs::path &file, KmerGuts *kguts,
     FastaParser parser;
     
     using namespace std::placeholders;
+    // bringing in boost made _1/_2 ambiguous even with the namespace decl
     
-    parser.set_callback(std::bind(&recall_sequence, fm, kguts, std::ref(calls_stream), std::ref(new_stream), _1, _2));
+    parser.set_callback(std::bind(&recall_sequence, fm, kguts, std::ref(calls_stream), std::ref(new_stream),
+				  std::placeholders::_1, std::placeholders::_2));
     parser.parse(ifstr);
     parser.parse_complete();
 }
@@ -959,6 +1129,8 @@ int main(int argc, char *argv[])
 
     tbb::task_scheduler_init sched_init(n_threads);
 
+    g_kmer_processor = new KmerProcessor(n_threads);
+
     fm.add_good_roles(good_roles);
     fm.add_good_functions(good_functions);
 
@@ -1017,7 +1189,12 @@ int main(int argc, char *argv[])
 			  });
     }
 
+    /*
+    g_kmer_processor->start();
     process_kmers(m);
+    g_kmer_processor->stop();
+    */
+    par_process_kmers(m);
     std::cout << "Kept " << kept_kmers.size() << " kmers\n";
     std::cout << "distinct_signatures=" << kmer_stats.distinct_signatures << "\n";
     std::cout << "num_seqs_with_a_signature=" << kmer_stats.seqs_with_a_signature.size() << "\n";
