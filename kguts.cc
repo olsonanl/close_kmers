@@ -1,5 +1,6 @@
 #include "kguts.h"
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <stdio.h>
@@ -51,9 +52,6 @@ KmerGuts::KmerGuts(const std::string &data_dir, std::shared_ptr<KmerImage> image
     hits_only = 0;
     size_hash = image->image()->num_sigs;
 
-    num_hits = 0;
-    num_oI = 0;
-
     set_default_parameters();
 
     do_init();
@@ -66,6 +64,10 @@ void KmerGuts::do_init()
     data = (char *) malloc(MAX_SEQ_LEN);
     pseq = (char *) malloc(MAX_SEQ_LEN / 3);
 
+    num_hits = 0;
+    num_oI = 0;
+
+    current_id[0] = 0;
 }
 
 /*
@@ -87,6 +89,8 @@ KmerGuts::KmerGuts(const std::string &data_dir, long long num_buckets) :
 
     unsigned long long image_size = sizeof(kmer_memory_image_t) + (sizeof(sig_kmer_t) * num_buckets);
     kmer_memory_image_t *image = static_cast<kmer_memory_image_t *>(malloc(image_size));
+    std::cerr << "Allocated image of size " << image_size << "\n";
+    memset(image, 0, image_size);
     image->num_sigs = num_buckets;
     image->entry_size = sizeof(sig_kmer_t);
     image->version = (long long) KMER_VERSION;
@@ -105,6 +109,56 @@ KmerGuts::KmerGuts(const std::string &data_dir, long long num_buckets) :
     kmer_image_for_loading_ = image;
     sig_kmers_for_loading_ = sig_kmers;
     image_size_for_loading_ = image_size;
+
+    set_default_parameters();
+    do_init();
+}
+
+KmerGuts::KmerGuts(KmerGuts &k)
+{
+    std::cerr << "copy construct kmer_guts to create " << this << " from " << &k << "\n";
+
+    debug = k.debug;
+    aa = k.aa;
+    hits_only = k.hits_only;
+    size_hash = k.size_hash;
+    num_hits = k.num_hits;
+    for (int i = 0; i < num_hits; i++)
+	hits[i] = k.hits[i];
+    num_oI = k.num_oI;
+    for (int i = 0; i < num_oI; i++)
+	oI_counts[i] = k.oI_counts[i];
+
+    kmers_loaded_ = k.kmers_loaded_;
+    kmer_image_for_loading_ = k.kmer_image_for_loading_;
+    image_size_for_loading_= k.image_size_for_loading_;
+    sig_kmers_for_loading_ = k.sig_kmers_for_loading_;
+
+    current_fI = k.current_fI;
+    strcpy(current_id, k.current_id);
+    current_length_contig = k.current_length_contig;
+    current_strand = k.current_strand;
+    current_prot_off = k.current_prot_off;
+    order_constraint = k.order_constraint;
+    min_hits = k.min_hits;
+    min_weighted_hits = k.min_weighted_hits;
+    max_gap = k.max_gap;
+
+    param_map_ = k.param_map_;
+
+    pIseq = 0;
+    data = 0;
+    cdata = 0;
+    pseq = 0;
+
+    tot_lookups = k.tot_lookups;
+    retry = k.retry;
+
+    kmersH = k.kmersH;
+
+    image_ = k.image_;
+
+    // long long alloc_sz = sizeof(kmer_memory_image_t) + (sizeof(sig_kmer_t) * k.size_hash);
 
     do_init();
 }
@@ -139,6 +193,7 @@ void KmerGuts::save_kmer_hash_table(const std::string &file)
 	fprintf(stderr,"could not open %s for writing: %s ",file.c_str(), strerror(errno));
 	exit(1);
     }
+    std::cerr << "Writing " << image_size_for_loading_ <<" bytes\n";
     fwrite(kmer_image_for_loading_, image_size_for_loading_, 1, fp);
     fclose(fp);
 }
@@ -893,17 +948,36 @@ struct less_second : std::binary_function<T,T,bool>
 	}
 };  
 
+struct FuncScore
+{
+    int count;
+    float weighted;
+    FuncScore() : count(0), weighted(0.0) {}
+    FuncScore(int c, float w) : count(c), weighted(w) {}
+    FuncScore(const FuncScore &f) : count(f.count), weighted(f.weighted) {}
+    FuncScore& operator=(const FuncScore& other)
+        {
+	    // check for self-assignment
+	    if(&other == this)
+		return *this;
+	    count = other.count;
+	    weighted = other.weighted;
+	    return *this;
+	}
+};
+
 /*
  * Find the best call from this set of calls.
  *
  * This code replicates the amino acid version of the SEED pipeline
  * km_process_hits_to_regions | km_pick_best_hit_in_peg
  */
-void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score)
+void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score, float &weighted_score)
 {
     function_index = -1;
     function = "";
     score = 0.0;
+    weighted_score = 0.0;
 
     if (calls.size() == 0)
     {
@@ -998,19 +1072,22 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
      *
      */
 
-    struct FuncScore
-    {
-	int count;
-	float weighted;
-    };
     typedef std::map<int, FuncScore> map_t;
 
     map_t by_func;
 
     for (auto c: merged)
     {
-	by_func[c.function_index].count += c.count;
-	by_func[c.function_index].weighted += c.weighted_hits;
+	auto it = by_func.find(c.function_index);
+	if (it == by_func.end())
+	{
+	    by_func.insert(std::make_pair(c.function_index, FuncScore(c.count, c.weighted_hits)));
+	}
+	else
+	{
+	    it->second.count += c.count;
+	    it->second.weighted += c.weighted_hits;
+	}
     }
 
     //typedef map_t::value_type ent_t;
@@ -1019,11 +1096,15 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
     std::vector<ent_t> vec;
     for (auto it = by_func.begin(); it != by_func.end(); it++)
 	vec.push_back(*it);
-    
-    std::partial_sort(vec.begin(), vec.begin() + 2, vec.end(), 
-			 [](const ent_t& s1, const ent_t& s2) {
-			     return s1.second.weighted > s2.second.weighted; });
 
+//    std::cerr << "vec len " << vec.size() << "\n";
+    if (vec.size() > 1)
+    {
+	std::partial_sort(vec.begin(), vec.begin() +  2, vec.end(), 
+			  [](const ent_t& s1, const ent_t& s2) {
+			      return s1.second.weighted > s2.second.weighted; });
+    }
+    
     #if 0
     for (auto x: vec)
     {
@@ -1046,6 +1127,7 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
 	function_index = best.first;
 	function = function_at_index(function_index);
 	score = score_offset;
+	weighted_score = best.second.weighted;
     }
     else
     {
@@ -1076,6 +1158,7 @@ void KmerGuts::find_best_call(const std::vector<KmerCall> &calls, int &function_
 		{
 		    function = f1 + " ?? " + f2;
 		    score = score_offset;
+		    weighted_score = vec[0].second.weighted;
 		}
 	    }
 	}

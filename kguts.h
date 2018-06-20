@@ -137,6 +137,7 @@ COMMAND LINE ARGUMENTS:
 #include <vector>
 #include <functional>
 #include <algorithm>
+#include <ostream>
 
 #include "kmer_image.h"
 
@@ -184,6 +185,15 @@ public:
     int count;
     unsigned int function_index;
     float weighted_hits;
+
+    KmerCall() : start(0), end(0), count(0), function_index(0), weighted_hits(0.0) { }
+    KmerCall(unsigned int s, unsigned int e, int c, unsigned int f, float w)  :
+        start(s), end(e), count(c), function_index(f), weighted_hits(w) { }
+KmerCall(KmerCall &&k) :
+        start(k.start), end(k.end), count(k.count), function_index(k.function_index), weighted_hits(k.weighted_hits) { }
+KmerCall(const KmerCall &k) :
+        start(k.start), end(k.end), count(k.count), function_index(k.function_index), weighted_hits(k.weighted_hits) { }
+
 };
 
 class KmerOtuStats
@@ -308,6 +318,17 @@ public:
 
     KmerGuts(const std::string &kmer_dir, std::shared_ptr<KmerImage> image);
     KmerGuts(const std::string &kmer_dir, long long num_buckets);
+    KmerGuts(KmerGuts &);
+    ~KmerGuts() {
+	if (pIseq)
+	    free(pIseq);
+	if (cdata)
+	    free(cdata);
+	if (data)
+	    free(data);
+	if (pseq)
+	    free(pseq);
+    }
     void do_init();
 
     unsigned char to_amino_acid_off(char c);
@@ -364,8 +385,13 @@ public:
     std::string format_hit(const hit_in_sequence_t &h);
     std::string format_otu_stats(const std::string &id, size_t size, KmerOtuStats &otu_stats);
 
-    void find_best_call(const std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score);
+    void find_best_call(std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score, float &weighted_score);
 };
 
+inline std::ostream &operator<<(std::ostream &os, const KmerCall &c)
+{
+    os << "KmerCall(" << c.start << "-" << c.end << ": " << c.count << ", " << c.function_index << ", " << c.weighted_hits << ")";
+    return os;
+}
 
 #endif /* _kmer_guts_h */
