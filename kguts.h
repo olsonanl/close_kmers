@@ -140,22 +140,8 @@ COMMAND LINE ARGUMENTS:
 #include <ostream>
 
 #include "kmer_image.h"
-
-#define KMER_SIZE 8
-#define MAX_SEQ_LEN 500000000
-
-#if KMER_SIZE == 5 
-const CORE = 20L*20L*20L*20L;
-#endif
-#if KMER_SIZE == 8
-const unsigned long long CORE = 20L*20L*20L*20L*20L*20L*20L;
-#endif
-
-#define MAX_ENCODED CORE*20L 
-
-#define MAX_HITS_PER_SEQ 40000
-
-#define OI_BUFSZ 5
+#include "kmer_params.h"
+#include "kmer_encoder.h"
 
 class KmerResult
 {
@@ -236,6 +222,7 @@ class KmerGuts
 {
 public:
 
+    KmerEncoder encoder_;
     typedef struct sig_kmer sig_kmer_t;
 
     struct hit_in_sequence_t {
@@ -289,6 +276,9 @@ public:
     void insert_kmer(const std::string &kmer,
 		     int function_index, int otu_index, unsigned short avg_offset,
 		     float function_weight);
+    void insert_kmer(unsigned long long encodedK,
+		     int function_index, int otu_index, unsigned short avg_offset,
+		     float function_weight);
     void save_kmer_hash_table(const std::string &file);
      
     
@@ -331,11 +321,11 @@ public:
     }
     void do_init();
 
-    unsigned char to_amino_acid_off(char c);
+    static unsigned char to_amino_acid_off(char c);
     char comp(char c);
     void rev_comp(const char *data,char *cdata);
-    unsigned long long encoded_kmer(unsigned char *p);
-    unsigned long long encoded_aa_kmer(const char *p);
+    static unsigned long long encoded_kmer(unsigned char *p);
+    static unsigned long long encoded_aa_kmer(const char *p);
     static void decoded_kmer(unsigned long long encodedK,char *decoded);
     int dna_char(char c);
     void translate(const char *seq,int off,char *pseq, unsigned char *pIseq);

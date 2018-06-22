@@ -71,7 +71,7 @@ OPT = -g -O3 -DTBB_USE_THREADING_TOOLS -fno-omit-frame-pointer $(UFLAGS)
 
 else
 
-OPT = -O3
+OPT = -O3 -g
 #OPT = -O -g -DGLIBCXX_FORCE_NEW
 #OPT = -O2 -pg
 #OPT = -g -O3
@@ -183,7 +183,7 @@ test_family_mapper: test_family_mapper.o fasta_parser.o kguts.o family_mapper.o 
 	kmer.o kmer_image.o kmer_inserter.o nr_loader.o threadpool.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
-build_signature_kmers: build_signature_kmers.o fasta_parser.o kguts.o kmer_image.o 
+build_signature_kmers: build_signature_kmers.o fasta_parser.o kguts.o kmer_image.o kmer_encoder.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 tt: tt.o
@@ -226,63 +226,75 @@ depend:
 # DO NOT DELETE
 
 add_request.o: add_request.h compute_request.h krequest2.h kmer.h klookup.h
-add_request.o: kguts.h kmer_image.h fasta_parser.h klookup2.h klookup3.h
-add_request.o: threadpool.h numa.h md5.h
+add_request.o: kguts.h kmer_image.h kmer_params.h kmer_encoder.h
+add_request.o: fasta_parser.h klookup2.h klookup3.h threadpool.h numa.h md5.h
 build_signature_kmers.o: seed_utils.h operators.h fasta_parser.h kguts.h
-build_signature_kmers.o: kmer_image.h global.h
+build_signature_kmers.o: kmer_image.h kmer_params.h kmer_encoder.h global.h
 dna_seq.o: dna_seq.h trans_table.h
-family_mapper.o: family_mapper.h kguts.h kmer_image.h kmer.h
+family_mapper.o: family_mapper.h kguts.h kmer_image.h kmer_params.h
+family_mapper.o: kmer_encoder.h kmer.h
 family_reps.o: family_reps.h
 fasta_parser.o: fasta_parser.h
 fastq_parser.o: fastq_parser.h
 fastq_to_protein.o: fastq_parser.h trans_table.h dna_seq.h
 kc.o: kmer.h kserver.h kmer_inserter.h krequest2.h klookup.h kguts.h
-kc.o: kmer_image.h fasta_parser.h klookup2.h klookup3.h compute_request.h
-kc.o: threadpool.h numa.h family_reps.h nr_loader.h
-kfile.o: kguts.h kmer_image.h fasta_parser.h
-kguts.o: kguts.h kmer_image.h global.h
-klookup2.o: klookup2.h kmer.h kguts.h kmer_image.h fasta_parser.h global.h
+kc.o: kmer_image.h kmer_params.h kmer_encoder.h fasta_parser.h klookup2.h
+kc.o: klookup3.h compute_request.h threadpool.h numa.h family_reps.h
+kc.o: nr_loader.h
+kfile.o: kguts.h kmer_image.h kmer_params.h kmer_encoder.h fasta_parser.h
+kguts.o: kguts.h kmer_image.h kmer_params.h kmer_encoder.h global.h
+klookup2.o: klookup2.h kmer.h kguts.h kmer_image.h kmer_params.h
+klookup2.o: kmer_encoder.h fasta_parser.h global.h
 klookup3.o: klookup3.h kmer.h global.h
-klookup.o: klookup.h kmer.h kguts.h kmer_image.h fasta_parser.h global.h
+klookup.o: klookup.h kmer.h kguts.h kmer_image.h kmer_params.h kmer_encoder.h
+klookup.o: fasta_parser.h global.h
 kmer.o: parallel_read.h parallel_read.cc popen.h kmer.h kguts.h kmer_image.h
-kmer.o: global.h
+kmer.o: kmer_params.h kmer_encoder.h global.h
+kmer_encoder.o: kguts.h kmer_image.h kmer_params.h kmer_encoder.h
 kmerge.o: stringutil.h
 kmer_image.o: kmer_image.h global.h
 kmer_inserter.o: kmer_inserter.h kmer.h
-krequest2.o: krequest2.h kmer.h klookup.h kguts.h kmer_image.h fasta_parser.h
-krequest2.o: klookup2.h klookup3.h compute_request.h threadpool.h numa.h
-krequest2.o: kserver.h kmer_inserter.h family_reps.h nr_loader.h global.h
-krequest2.o: add_request.h matrix_request.h prot_seq.h query_request.h
-krequest2.o: lookup_request.h debug.h
-krequest.o: krequest.h kmer.h klookup.h kguts.h kmer_image.h fasta_parser.h
-krequest.o: klookup2.h klookup3.h global.h
+krequest2.o: krequest2.h kmer.h klookup.h kguts.h kmer_image.h kmer_params.h
+krequest2.o: kmer_encoder.h fasta_parser.h klookup2.h klookup3.h
+krequest2.o: compute_request.h threadpool.h numa.h kserver.h kmer_inserter.h
+krequest2.o: family_reps.h nr_loader.h global.h add_request.h
+krequest2.o: matrix_request.h prot_seq.h query_request.h lookup_request.h
+krequest2.o: debug.h
+krequest.o: krequest.h kmer.h klookup.h kguts.h kmer_image.h kmer_params.h
+krequest.o: kmer_encoder.h fasta_parser.h klookup2.h klookup3.h global.h
 kser.o: global.h kmer.h kserver.h kmer_inserter.h krequest2.h klookup.h
-kser.o: kguts.h kmer_image.h fasta_parser.h klookup2.h klookup3.h
-kser.o: compute_request.h threadpool.h numa.h family_reps.h nr_loader.h
+kser.o: kguts.h kmer_image.h kmer_params.h kmer_encoder.h fasta_parser.h
+kser.o: klookup2.h klookup3.h compute_request.h threadpool.h numa.h
+kser.o: family_reps.h nr_loader.h
 kserver.o: kserver.h kmer.h kmer_inserter.h krequest2.h klookup.h kguts.h
-kserver.o: kmer_image.h fasta_parser.h klookup2.h klookup3.h
-kserver.o: compute_request.h threadpool.h numa.h family_reps.h nr_loader.h
-kserver.o: global.h
+kserver.o: kmer_image.h kmer_params.h kmer_encoder.h fasta_parser.h
+kserver.o: klookup2.h klookup3.h compute_request.h threadpool.h numa.h
+kserver.o: family_reps.h nr_loader.h global.h
 lookup_request.o: lookup_request.h compute_request.h krequest2.h kmer.h
-lookup_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
-lookup_request.o: klookup3.h threadpool.h numa.h prot_seq.h kserver.h
-lookup_request.o: kmer_inserter.h family_reps.h nr_loader.h global.h
+lookup_request.o: klookup.h kguts.h kmer_image.h kmer_params.h kmer_encoder.h
+lookup_request.o: fasta_parser.h klookup2.h klookup3.h threadpool.h numa.h
+lookup_request.o: prot_seq.h kserver.h kmer_inserter.h family_reps.h
+lookup_request.o: nr_loader.h global.h
 matrix_request.o: matrix_request.h compute_request.h krequest2.h kmer.h
-matrix_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
-matrix_request.o: klookup3.h threadpool.h numa.h prot_seq.h
-nr_loader.o: nr_loader.h kmer.h threadpool.h kmer_image.h kguts.h numa.h
-nr_loader.o: kmer_inserter.h fasta_parser.h
+matrix_request.o: klookup.h kguts.h kmer_image.h kmer_params.h kmer_encoder.h
+matrix_request.o: fasta_parser.h klookup2.h klookup3.h threadpool.h numa.h
+matrix_request.o: prot_seq.h
+nr_loader.o: nr_loader.h kmer.h threadpool.h kmer_image.h kguts.h
+nr_loader.o: kmer_params.h kmer_encoder.h numa.h kmer_inserter.h
+nr_loader.o: fasta_parser.h
 propagate_names.o: propagate_names.h operators.h
 query_request.o: query_request.h compute_request.h krequest2.h kmer.h
-query_request.o: klookup.h kguts.h kmer_image.h fasta_parser.h klookup2.h
-query_request.o: klookup3.h threadpool.h numa.h
-test_family_mapper.o: family_mapper.h kguts.h kmer_image.h kmer.h
-test_family_mapper.o: kmer_inserter.h nr_loader.h threadpool.h numa.h
-test_family_mapper.o: fasta_parser.h global.h
-threadpool.o: threadpool.h kmer_image.h kguts.h numa.h
+query_request.o: klookup.h kguts.h kmer_image.h kmer_params.h kmer_encoder.h
+query_request.o: fasta_parser.h klookup2.h klookup3.h threadpool.h numa.h
+test_family_mapper.o: family_mapper.h kguts.h kmer_image.h kmer_params.h
+test_family_mapper.o: kmer_encoder.h kmer.h kmer_inserter.h nr_loader.h
+test_family_mapper.o: threadpool.h numa.h fasta_parser.h global.h
+threadpool.o: threadpool.h kmer_image.h kguts.h kmer_params.h kmer_encoder.h
+threadpool.o: numa.h
 trans_table.o: trans_table.h
 tst_family_reps.o: family_reps.h
-unique_prots.o: global.h kguts.h kmer_image.h fasta_parser.h
+unique_prots.o: global.h kguts.h kmer_image.h kmer_params.h kmer_encoder.h
+unique_prots.o: fasta_parser.h
 validate_fasta.o: fasta_parser.h
 validate_fastq.o: fastq_parser.h trans_table.h dna_seq.h
-x.o: kguts.h kmer_image.h
+x.o: kguts.h kmer_image.h kmer_params.h kmer_encoder.h

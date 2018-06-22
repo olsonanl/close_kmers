@@ -163,11 +163,25 @@ KmerGuts::KmerGuts(KmerGuts &k)
     do_init();
 }
 
+inline long long KmerGuts::find_empty_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK) {
+    long long hash_entry = encodedK % size_hash;
+    while (sig_kmers[hash_entry].which_kmer <= MAX_ENCODED)
+      hash_entry = (hash_entry+1)%size_hash;
+    return hash_entry;
+}
+
 void KmerGuts::insert_kmer(const std::string &kmer,
 			   int function_index, int otu_index, unsigned short avg_offset,
 			   float function_weight)
 {
-    unsigned long long encodedK = encoded_aa_kmer(kmer.c_str());
+    unsigned long long encodedK = encoder_.encoded_aa_kmer(kmer.c_str());
+    insert_kmer(encodedK, function_index, otu_index, avg_offset, function_weight);
+}
+
+void KmerGuts::insert_kmer(unsigned long long encodedK,
+			   int function_index, int otu_index, unsigned short avg_offset,
+			   float function_weight)
+{
     if (encodedK > MAX_ENCODED)
     {
 	// std::cerr << "Warn: " << kmer << " contains invalid characters\n";
@@ -235,7 +249,7 @@ void KmerGuts::set_parameters(const std::map<std::string, std::string> &params)
 
 /* =========================== end of reduction global variables ================= */
 
-unsigned char KmerGuts::to_amino_acid_off(char c) {
+inline unsigned char KmerGuts::to_amino_acid_off(char c) {
   switch (c)
     {
       case 'A':
@@ -544,13 +558,6 @@ char **KmerGuts::load_functions(const char *file, int *sz) {
 
 char **KmerGuts::load_otus(const char *file, int *sz) {
   return load_indexed_ar(file,sz);
-}
-
-long long KmerGuts::find_empty_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK) {
-    long long hash_entry = encodedK % size_hash;
-    while (sig_kmers[hash_entry].which_kmer <= MAX_ENCODED)
-      hash_entry = (hash_entry+1)%size_hash;
-    return hash_entry;
 }
 
 long long KmerGuts::lookup_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK) {

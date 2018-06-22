@@ -501,8 +501,8 @@ public:
 	    return it->second;
     }
 
-    void write_function_index(const std::string &dir) {
-	std::ofstream of(dir + "/function.index");
+    void write_function_index(const fs::path &dir) {
+	fs::ofstream of(dir / "function.index");
 
 	std::map<int, std::string> by_index;
 	for (auto ent: function_index_map_)
@@ -811,12 +811,12 @@ void compute_weight_of_signature(KeptKmer &kk)
 
 }
 
-void write_function_index(const std::string &dir, FunctionMap &fm)
+void write_function_index(const fs::path &dir, FunctionMap &fm)
 {
     fm.write_function_index(dir);
 }
 
-KmerGuts *write_hashtable(const std::string &dir, tbb::concurrent_vector<KeptKmer> &kmers)
+KmerGuts *write_hashtable(const fs::path &dir, tbb::concurrent_vector<KeptKmer> &kmers)
 {
     std::vector<unsigned long> primes {3769,6337,12791,24571,51043,101533,206933,400187,
 	    821999,2000003,4000037,8000009,16000057,32000011,
@@ -842,15 +842,14 @@ KmerGuts *write_hashtable(const std::string &dir, tbb::concurrent_vector<KeptKme
     }
     std::cerr << "Using hashtable size " << hashtable_size << " for " << kmers.size() << "\n";
 	
-    KmerGuts *kguts = new KmerGuts(dir, hashtable_size);
+    KmerGuts *kguts = new KmerGuts(dir.string(), hashtable_size);
 
     for (auto k: kmers)
     {
-	std::string kstr(k.kmer.begin(), k.kmer.end());
-	kguts->insert_kmer(kstr,
+	kguts->insert_kmer(kguts->encoder_.encoded_aa_kmer(k.kmer),
 			  k.function_index, k.otu_index, k.median_offset, k.weight);
     }
-    kguts->save_kmer_hash_table(dir + "/kmer.table.mem_map");
+    kguts->save_kmer_hash_table((dir / "kmer.table.mem_map").string());
     return kguts;
 }
 
@@ -979,6 +978,7 @@ bool process_command_line_options(int argc, char *argv[],
 				  fs::path &recall_output_path,
 				  int &recall_min_hits,
 				  int &recall_max_gap,
+				  fs::path &kmer_data_dir,
 				  fs::path &final_kmers,
 				  int &n_threads)
 {
@@ -1005,6 +1005,7 @@ bool process_command_line_options(int argc, char *argv[],
 	("fasta-keep-functions-dir,K", po::value<std::vector<std::string>>(&fasta_keep_dirs), "Directory of fasta files of protein data (keep functions defined here)")
 	("good-functions", po::value<std::vector<std::string>>(&good_function_files), "File containing list of functions to be kept")
 	("good-roles", po::value<std::vector<std::string>>(&good_role_files), "File containing list of roles to be kept")
+	("kmer-data-dir", po::value<fs::path>(&kmer_data_dir), "Write kmer data files to this directory")
 	("min-reps-required", po::value<int>(&min_reps_required), "Minimum number of genomes a function must be seen in to be considered for kmers")
 	("final-kmers", po::value<fs::path>(&final_kmers), "Write final.kmers file to be consistent with km_build_Data")
 	("recall-output", po::value<std::string>(&recall_output), "Recall proteins and write output to this path")
@@ -1062,7 +1063,8 @@ int main(int argc, char *argv[])
 
     fs::path recall_output_path;
     fs::path final_kmers;
-    
+    fs::path kmer_data_dir;
+
     int min_reps_required = 5;
 
     int recall_min_hits;
@@ -1080,6 +1082,7 @@ int main(int argc, char *argv[])
 				      recall_output_path,
 				      recall_min_hits,
 				      recall_max_gap,
+				      kmer_data_dir,
 				      final_kmers,
 				      n_threads))
     {
@@ -1127,6 +1130,21 @@ int main(int argc, char *argv[])
 	}
     }
 
+    /*
+     * validate our kmer_data_dir
+     */
+    if (!kmer_data_dir.empty())
+    {
+	if (!fs::is_directory(kmer_data_dir))
+	{
+	    if (!fs::create_directory(kmer_data_dir))
+	    {
+		std::cerr << "Error creating " << kmer_data_dir << "\n";
+		exit(1);
+	    }
+	}
+    }
+
     tbb::task_scheduler_init sched_init(n_threads);
 
     g_kmer_processor = new KmerProcessor(n_threads);
@@ -1161,8 +1179,17 @@ int main(int argc, char *argv[])
      * manage the set that we want to keep.
      */
     fm.process_kept_functions(min_reps_required);
-    std::string dir("tmp_out");
-    write_function_index(dir, fm);
+    write_function_index(kmer_data_dir, fm);
+    /* Write an empty otu index and genomes file (genomes file
+     * can't be empty because kmer_search uses "-s genomes" to test
+     * for its existence). */
+    {
+	fs::ofstream otu(kmer_data_dir / "otu.index");
+	otu.close();
+	fs::ofstream genomes(kmer_data_dir / "genomes");
+	genomes << "empty genomes\n";
+	genomes.close();
+    }
 
     /*
      * With that done, go ahead and extract kmers.
@@ -1198,23 +1225,29 @@ int main(int argc, char *argv[])
     std::cout << "Kept " << kept_kmers.size() << " kmers\n";
     std::cout << "distinct_signatures=" << kmer_stats.distinct_signatures << "\n";
     std::cout << "num_seqs_with_a_signature=" << kmer_stats.seqs_with_a_signature.size() << "\n";
+    std::cerr << "computing weights\n";
     std::for_each(kept_kmers.begin(), kept_kmers.end(), compute_weight_of_signature);
+    std::cerr << "done\n";
 
     if (!final_kmers.empty())
     {
+	std::cerr << "writing kmers to " << final_kmers << "\n";
 	fs::ofstream kf(final_kmers);
 	std::for_each(kept_kmers.begin(), kept_kmers.end(), [&kf](const KeptKmer &k) {
 		kf << k.kmer << "\t" << k.median_offset << "\t" << k.function_index << "\t" << k.weight << "\t" << k.otu_index << "\n";
 		// kf << "\t" << k.seqs_containing_sig << "\t" << kmer_stats.seqs_with_func[k.function_index] << "\n";
 	    });
+	std::cerr << "done\n";
     }
 
-    KmerGuts *kguts = write_hashtable(dir, kept_kmers);
+    std::cerr << "writing hashtable to " << kmer_data_dir << " ...\n";
+    KmerGuts *kguts = write_hashtable(kmer_data_dir, kept_kmers);
+    std::cerr << "writing hashtable to " << kmer_data_dir << " done\n";
 
     /*
      * Ick.
      */
-    std::string fidx = dir + "/function.index";
+    fs::path fidx = kmer_data_dir / "function.index";
     kguts->kmersH->function_array = kguts->load_functions(fidx.c_str(), &kguts->kmersH->function_count);
     kguts->kmersH->otu_array = kguts->load_otus("/dev/null", &kguts->kmersH->otu_count);
 
@@ -1224,12 +1257,13 @@ int main(int argc, char *argv[])
 	kguts->max_gap = recall_max_gap;
 
 	KmerGuts *shared_kguts = kguts;
+	int n = all_fasta_data.size();
 
 	if (n_threads >= 1)
 	{
-	    int n = all_fasta_data.size();
+	    std::cerr << "starting recall of " << n << " genomes with " << n_threads << " threads\n";
 	    tbb::parallel_for(tbb::blocked_range<size_t>(0, n),
-			      [&fm, &shared_kguts, recall_calls_dir, recall_new_dir, all_fasta_data, dir,
+			      [&fm, &shared_kguts, recall_calls_dir, recall_new_dir, all_fasta_data, kmer_data_dir,
 			       recall_min_hits, recall_max_gap, fidx](const tbb::blocked_range<size_t> &r) {
 
 				  //KmerGuts *kguts = new KmerGuts(dir, shared_kguts->image_);
@@ -1256,6 +1290,7 @@ int main(int argc, char *argv[])
 	}
 	else
 	{
+	    std::cerr << "starting recall of " << n << " genomes with single thread\n";
 	    for (auto file: all_fasta_data)
 	    {
 		//KmerGuts k(*kguts);
@@ -1264,6 +1299,7 @@ int main(int argc, char *argv[])
 	    }
 	}
     }
+    std::cerr << "all done\n";
 
     free(kguts->kmer_image_for_loading_);
     free(kguts->kmersH->function_array);
