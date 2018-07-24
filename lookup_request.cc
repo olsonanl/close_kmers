@@ -195,9 +195,11 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 			if (find_best_match_ && family_mode_)
 			{
 			    int best_call_fi;
-			    float best_call_score;
+			    float best_call_score, best_call_score_offset;
 			    std::string best_call_function;
-			    kguts->find_best_call(*calls, best_call_fi, best_call_function, best_call_score);
+			    float best_call_weighted_score;
+			    kguts->find_best_call(*calls, best_call_fi, best_call_function,
+						  best_call_score, best_call_weighted_score, best_call_score_offset);
 			    // std::cout << "Best call for " << id << ": " << best_call_fi << " " << best_call_function << " " << best_call_score << "\n";
 
 			    /*
@@ -313,7 +315,7 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 			    /*
 			     * We have found our best scores. Write output.
 			     */
-			    os << id << "\t" << best_gf.fam << "\t" << best_gf.score << "\t" << best_lf.fam << "\t" << best_lf.score << "\t" << (do_ambig_test ? best_lf.function : best_call_function) << "\t" << best_call_score << "\n";
+			    os << id << "\t" << best_gf.fam << "\t" << best_gf.score << "\t" << best_lf.fam << "\t" << best_lf.score << "\t" << (do_ambig_test ? best_lf.function : best_call_function) << "\t" << best_call_score << "\t" << best_call_weighted_score << "\n";
 			}
 			else
 			{

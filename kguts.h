@@ -375,7 +375,7 @@ public:
     std::string format_hit(const hit_in_sequence_t &h);
     std::string format_otu_stats(const std::string &id, size_t size, KmerOtuStats &otu_stats);
 
-    void find_best_call(std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score, float &weighted_score);
+    void find_best_call(std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score, float &weighted_score, float &score_offset);
 };
 
 inline std::ostream &operator<<(std::ostream &os, const KmerCall &c)

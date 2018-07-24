@@ -33,6 +33,8 @@ void validate(const std::string &fastq_file)
 		total += seq.size();
 		sizes.push_back(seq.size());
 
+		#if 0
+
 		DNASequence dna(id, seq);
 		// std::cout << seq << "\n";
 		auto prots = dna.get_possible_proteins(t);
@@ -51,6 +53,7 @@ void validate(const std::string &fastq_file)
 			}
 		    }
 		}
+		#endif
 	    }
 	    return 0;
 	});

@@ -786,7 +786,7 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
 	     unsigned int fI        = kmers_hash_entry->function_index;
 	     int oI          = kmers_hash_entry->otu_index;
 	     float f_wt      = kmers_hash_entry->function_wt;
-	     if (hit_cb)
+	     if (hit_cb != nullptr)
 	     {
 
 		 hit_cb(hit_in_sequence_t(*kmers_hash_entry, pLoc));
@@ -979,7 +979,7 @@ struct FuncScore
  * This code replicates the amino acid version of the SEED pipeline
  * km_process_hits_to_regions | km_pick_best_hit_in_peg
  */
-void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score, float &weighted_score)
+void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score, float &weighted_score, float &score_offset)
 {
     function_index = -1;
     function = "";
@@ -1115,12 +1115,11 @@ void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index,
     #if 0
     for (auto x: vec)
     {
-	std::cerr << x.first << " " << x.second << " ";
+	std::cerr << x.first << " " << x.second.count << " " << x.second.weighted << " ";
 	std::cerr << function_at_index(x.first) << "\n";
     }
     #endif
     
-    float score_offset;
     if (vec.size() == 1)
 	score_offset = (float) vec[0].second.count;
     else
@@ -1133,14 +1132,14 @@ void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index,
 	auto best = vec[0];
 	function_index = best.first;
 	function = function_at_index(function_index);
-	score = score_offset;
+	score = best.second.count;
 	weighted_score = best.second.weighted;
     }
     else
     {
 	function_index = -1;
 	function = "";
-	score = 0;
+	score = 0.0;
 
 	/*
 	 * Try to compute a fallback function naming the two best hits if there are two hits within the
@@ -1156,7 +1155,7 @@ void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index,
 	    if (vec.size() == 2)
 	    {
 		function = f1 + " ?? " + f2;
-		score = score_offset;
+		score = vec[0].second.count;
 	    }
 	    else if (vec.size() > 2)
 	    {
@@ -1164,7 +1163,8 @@ void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index,
 		if (pair_offset > 5.0)
 		{
 		    function = f1 + " ?? " + f2;
-		    score = score_offset;
+		    score = vec[0].second.count;
+		    score_offset = pair_offset;
 		    weighted_score = vec[0].second.weighted;
 		}
 	    }
