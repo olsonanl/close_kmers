@@ -630,6 +630,7 @@ kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long long num_
   if (debug >= 2)
     fprintf(stderr,"loaded %lld kmers\n",loaded);
 
+  fclose(ifp);
   return image;
 }
 

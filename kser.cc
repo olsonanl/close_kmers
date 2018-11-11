@@ -41,12 +41,12 @@ int main(int argc, char* argv[])
     std::string listen_port_file;
     std::string kmer_data;
     std::string peg_kmer_data;
-    int n_load_threads;
-    int n_kmer_threads;
-    bool daemonize;
+    int n_load_threads = 1;
+    int n_kmer_threads = 1;
+    bool daemonize = false;
     std::string pid_file;
     std::string kmer_family_distribution_file;
-    bool no_listen;
+    bool no_listen = false;
     std::string family_reps;
     
     desc.add_options()
