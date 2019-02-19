@@ -48,7 +48,7 @@ HIT	    GDSAGGTA	100	DNA gyrase subunit B (EC 5.99.1.3)
 HIT	    DSAGGTAK	101	DNA gyrase subunit B (EC 5.99.1.3)
 HIT	    SAGGTAKQ	102	DNA gyrase subunit B (EC 5.99.1.3)
 
-The run of hits starting at 10 thru 79 is terminate when the hits at 92 and 93 are see.
+The run of hits starting at 10 thru 79 is terminated when the hits at 92 and 93 are seen.
 
 We use KmerGuts::find_best_call to process that data to determine the call we will give the protein.
 Historical note: this routine is a port of the km_process_hits_to_regions | km_pick_best_hit_in_peg 
@@ -96,14 +96,14 @@ DNA topoisomerase IV subunit B (EC 5.99.1.3) score=5, weighted = 9.1869.
 The score offset is 23 for the gyrase, so that is the assigned function for this protein
 with a score of 28 and a weighted score of 62.6252.
 
-We now consider the placement of a query protein A into a protin family. This algorithm is dependent on a 
+We now consider the placement of a query protein Q into a protein family. This algorithm is dependent on a 
 precomputed mapping of signature kmer to associated families. 
 
 Details below. In English:
 
-    Call the function for this protein.
-    For each signature Kmer in this protein, look up the families that contain the kmer.
-    Discard any families whose function does not match the protein function.
+    Call the function for Q as C.
+    For each signature Kmer in Q, look up the families that contain the kmer.
+    Discard any families whose function is not C
     For the remaining families, we accumulate the number of kmers seen for each family, as well
     as an accumulated weighted total.
     The weighted total accumulates 1/N per kmer, where N is the number of families to which the 
