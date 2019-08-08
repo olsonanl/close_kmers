@@ -11,14 +11,14 @@
 class LookupRequest : public ComputeRequest
 {
 public:
-    LookupRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, bool family_mode, int content_length, bool chunked = false);
+    LookupRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, bool family_mode, size_t content_length, bool chunked = false);
     ~LookupRequest() { std::cerr << "Destroy lookuprequest " << this << "\n"; }
     void run();
 
 private:
     bool family_mode_;
     std::shared_ptr<KmerPegMapping> mapping_;
-    int content_length_;
+    size_t content_length_;
     bool chunked_;
     std::shared_ptr<KmerRequest2> owner_;
     FastaParser parser_;

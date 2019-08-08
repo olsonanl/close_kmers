@@ -10,12 +10,12 @@
 class QueryRequest : public ComputeRequest
 {
 public:
-    QueryRequest(std::shared_ptr<KmerRequest2> owner, int content_length, bool chunked = false);
+    QueryRequest(std::shared_ptr<KmerRequest2> owner, size_t content_length, bool chunked = false);
     ~QueryRequest() { std::cerr << "Destroy queryrequest " << this << "\n"; }
     void run();
 
 private:
-    int content_length_;
+    size_t content_length_;
     bool chunked_;
     std::shared_ptr<KmerRequest2> owner_;
     FastaParser parser_;

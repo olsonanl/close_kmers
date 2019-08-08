@@ -11,9 +11,8 @@
 
 namespace po = boost::program_options;
 
-void validate(const std::string &fastq_file)
+void validate(std::istream &fastq)
 {
-    std::ifstream fastq(fastq_file);
 
     std::map<std::string, int> id_count;
     std::vector<unsigned long> sizes;
@@ -142,7 +141,16 @@ int main(int argc, char* argv[])
     }
 
     try {
-	validate(fastq_file);
+	if (fastq_file == "-")
+	{
+	    validate(std::cin);
+	}
+	else
+	{
+	    std::ifstream fastq(fastq_file);
+
+	    validate(fastq);
+	}
     }
     catch (std::exception &e)
     {

@@ -1,14 +1,15 @@
 #include "family_mapper.h"
 
-FamilyMapper::FamilyMapper(std::shared_ptr<KmerGuts> kguts,
+FamilyMapper::FamilyMapper(KmerGuts *kguts,
 			   std::shared_ptr<KmerPegMapping> mapping) :
     find_best_match_(false),
     family_mode_(true),
     kmer_hit_threshold_(3),
     allow_ambiguous_functions_(false),
+    mapping_(mapping),
+    target_genus_id_(0),
     find_reps_(false),
-    kguts_(kguts),
-    mapping_(mapping)
+    kguts_(kguts)
     
 {
 }
@@ -64,7 +65,7 @@ void FamilyMapper::ingest_protein(const std::string &id, const std::string &seq)
 FamilyMapper::best_match_t FamilyMapper::find_best_family_match(const std::string &id, const std::string &seq)
 {
     int best_call_fi;
-    float best_call_score;
+    float best_call_score, best_weighted_score, best_score_offset;
     std::string best_call_function;
 
     find_best_match_ = family_mode_ = true;
@@ -93,7 +94,8 @@ FamilyMapper::best_match_t FamilyMapper::find_best_family_match(const std::strin
      * typical behavior. 
      */
 
-    kguts_->find_best_call(*calls_, best_call_fi, best_call_function, best_call_score);
+    
+    kguts_->find_best_call(*calls_, best_call_fi, best_call_function, best_call_score, best_weighted_score, best_score_offset);
 
     // std::cout << "Best call for " << id << ": " << best_call_fi << " " << best_call_function << " " << best_call_score << "\n";
 	
@@ -170,7 +172,8 @@ FamilyMapper::best_match_t FamilyMapper::find_best_family_match(const std::strin
 	
 	
 	// std::cerr << score << " " << best_lf.score << " " << fam_data.genus_id << " " << target_genus_id_ << "\n";
-	if (score_ent.weighted_total > best_lf.score && fam_data.genus_id == target_genus_id_)
+	// if (score_ent.weighted_total > best_lf.score && fam_data.genus_id == target_genus_id_)
+	if (score_ent.weighted_total > best_lf.score)
 	{
 	    best_lf.score = score_ent.weighted_total;
 	    best_lf.fam = fam_data.plf;
@@ -201,7 +204,7 @@ FamilyMapper::best_match_t FamilyMapper::find_best_family_match(const std::strin
     return { best_gf.fam, best_gf.score, best_lf.fam, best_lf.score, (do_ambig_test ? best_lf.function : best_call_function), best_call_score };
 }
 
-void FamilyMapper::find_all_matches(const std::string &id, const std::string &seq)
+void FamilyMapper::find_all_matches(std::ostream &os, const std::string &id, const std::string &seq)
 {
     find_best_match_ = false;
     family_mode_ = true;
@@ -220,7 +223,6 @@ void FamilyMapper::find_all_matches(const std::string &id, const std::string &se
 	    return lhs.second.weighted_total > rhs.second.weighted_total;
 	});
     
-    std::ostream &os = std::cout;
     os << id << "\n";
     for (auto it: vec)
     {

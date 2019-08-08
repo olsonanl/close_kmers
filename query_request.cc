@@ -9,7 +9,7 @@ inline std::string make_string(boost::asio::streambuf& streambuf)
 	    buffers_end(streambuf.data())};
 }
 
-QueryRequest::QueryRequest(std::shared_ptr<KmerRequest2> owner, int content_length, bool chunked) :
+QueryRequest::QueryRequest(std::shared_ptr<KmerRequest2> owner, size_t content_length, bool chunked) :
     content_length_(content_length),
     chunked_(chunked),
     owner_(owner),

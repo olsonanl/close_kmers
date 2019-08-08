@@ -38,6 +38,7 @@ std::vector<std::string> split(const std::string &s, char delim) {
 }
 
 KmerPegMapping::KmerPegMapping() :
+    next_peg_id_(0),
     next_family_id_(0),
     kcount_(0),
     next_genome_id_(0)
@@ -64,11 +65,14 @@ void KmerPegMapping::load_genome_map(const std::string &genome_file)
 	std::cout << "Failed to open " << genome_file << "\n";
 	exit(1);
     }
+    std::cerr << "loading genome map " << genome_file << std::endl;
 
     std::string line;
     while (std::getline(gfile, line))
     {
 	std::vector<std::string> x = split(line, '\t');
+	if (x.size() != 2)
+	    continue;
 	std::string genome = x[1];
 	unsigned int id = next_genome_id_++;
 	genome_to_id_[genome] = id;

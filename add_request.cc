@@ -13,7 +13,7 @@ inline std::string make_string(boost::asio::streambuf& streambuf)
 	    buffers_end(streambuf.data())};
 }
 
-AddRequest::AddRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, int content_length, bool chunked) :
+AddRequest::AddRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, size_t content_length, bool chunked) :
     silent_(0),
     mapping_(mapping),
     content_length_(content_length),
@@ -139,6 +139,27 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 				os << kguts->format_call(c);
 			    }
 			    os << kguts->format_otu_stats(id, seq.size(), *stats);
+
+			    int best_call_fi;
+			    float best_call_score, best_call_score_offset;
+			    std::string best_call_function;
+			    float best_call_weighted_score;
+			    kguts->find_best_call(*calls, best_call_fi, best_call_function,
+						  best_call_score, best_call_weighted_score, best_call_score_offset);
+			    std::string ambig_function;
+			    bool do_ambig_test = false;
+			    if (best_call_function.empty())
+				best_call_function = "hypothetical protein";
+			    else
+			    {
+				size_t where = best_call_function.find(" ?? ");
+				if (where != std::string::npos)
+				{
+				    best_call_function = "hypothetical protein";
+				}
+			    }
+			    os << "BEST-CALL\t" << id << "\t" << best_call_function << "\t" << best_call_score << "\t"
+			       << best_call_weighted_score << "\t" << best_call_score_offset << "\n";
 			}
 #ifdef USE_TBB
 			KmerPegMapping::encoded_id_t enc_id = m.encode_id(id);

@@ -1,6 +1,14 @@
 #include "lookup_request.h"
 #include "kserver.h"
 
+/*
+ * /lookup handler
+ *
+ * Provides kmer function + protein family estimation
+ */
+ 
+
+
 #include <string>
 #include <boost/bind.hpp>
 #include <boost/asio/buffer.hpp>
@@ -23,7 +31,7 @@ inline std::string make_string(boost::asio::streambuf& streambuf)
 }
 
 LookupRequest::LookupRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping,
-			     bool family_mode, int content_length, bool chunked) :
+			     bool family_mode, size_t content_length, bool chunked) :
     family_mode_(family_mode),
     mapping_(mapping),
     content_length_(content_length),
@@ -402,6 +410,7 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 
 			// std::cerr << "write results size " << sbuf->size() << "\n";
 			boost::asio::async_write(owner_->socket(), boost::asio::buffer(sbuf->data()),
+
 						 [this, err, sbuf](const boost::system::error_code &err2, const long unsigned int &bytes2){
 						     // std::cerr << "write done in " << pthread_self() << " err=" << err.message() << " content_length=" << content_length_ <<"\n";
 						     // std::cerr << "   err2=" << err2.message() << " bytes2=" << bytes2 << "\n";

@@ -28,7 +28,7 @@ static int n_kmer_threads;
 
 static void process_parameters(int argc, char **argv);
 
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
     process_parameters(argc, argv);
 
@@ -42,7 +42,8 @@ main(int argc, char **argv)
     }
 
     auto image = std::make_shared<KmerImage>(kmer_data);
-    auto kguts = std::make_shared<KmerGuts>(kmer_data, image);
+    //auto kguts = std::make_shared<KmerGuts>(kmer_data, image);
+    auto kguts = new KmerGuts(kmer_data, image);
 
     /*
      * Create a mapping. This is a copy of code from kserver.cc.
@@ -124,7 +125,7 @@ main(int argc, char **argv)
     FastaParser fp;
 
     fp.set_callback([&mapper](const std::string &id, const std::string &seq) {
-	    mapper.find_all_matches(id, seq);
+	    mapper.find_all_matches(std::cout, id, seq);
 	    return 0;
 	});
     fp.parse(in);
@@ -136,6 +137,7 @@ main(int argc, char **argv)
     std::cout << "stop thread pool...\n";
     tp->stop();
     std::cout << "stop thread pool...done\n";
+    return 0;
 }
 
 static void process_parameters(int argc, char **argv)

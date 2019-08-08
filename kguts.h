@@ -300,6 +300,9 @@ public:
     char *data;
     char *cdata;
     char *pseq;
+    // Work around lost pointers to internal allocation from the original kguts code.
+    // This is a list of pointers to be freed when we're done.
+    std::vector<char *> to_be_freed;
 
     int tot_lookups;
     int retry;
@@ -309,16 +312,7 @@ public:
     KmerGuts(const std::string &kmer_dir, std::shared_ptr<KmerImage> image);
     KmerGuts(const std::string &kmer_dir, long long num_buckets);
     KmerGuts(KmerGuts &);
-    ~KmerGuts() {
-	if (pIseq)
-	    free(pIseq);
-	if (cdata)
-	    free(cdata);
-	if (data)
-	    free(data);
-	if (pseq)
-	    free(pseq);
-    }
+    ~KmerGuts(); 
     void do_init();
 
     static unsigned char to_amino_acid_off(char c);
@@ -339,7 +333,7 @@ public:
 
     void process_set_of_hits(std::shared_ptr<std::vector<KmerCall>> calls,
 				       std::shared_ptr<KmerOtuStats> otu_stats);
-    void gather_hits(size_t ln_DNA, char strand,int prot_off,const char *pseq,
+    void gather_hits(const char *pseq,
 		     unsigned char *pIseq,
 		     std::shared_ptr<std::vector<KmerCall>> calls,
 		     std::function<void(hit_in_sequence_t)> hit_cb,

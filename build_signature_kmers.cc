@@ -25,6 +25,7 @@
 #include <fstream>
 #include <functional>
 #include <memory>
+#include <experimental/optional>
 #include <unistd.h>
 
 #include <boost/regex.hpp>
@@ -51,7 +52,7 @@ using namespace seed_utils;
 namespace po = boost::program_options;
 namespace fs = boost::filesystem;
 
-const int K = 8;
+const int K = KMER_SIZE;
 const int MaxSequencesPerFile = 100000;
 
 typedef std::array<char, K> Kmer;
@@ -287,14 +288,16 @@ public:
 	    else
 		func = line.substr(s+1, s2 - s - 1);
 
-	    id_function_map_[id] = strip_func_comment(func);
+	    std::string stripped = strip_func_comment(func);
+	    id_function_map_[id] = stripped;
+	    // std::cerr << "Load '" << id << "' as '" << func << "' stripped='" << stripped << "'\n";
 	}
     }
 
     /*
      * Load assignments and sequence visibility data from a fasta file.
      *
-     * If the def line has an assignment on it, updated the assignment map.
+     * If the def line has an assignment on it, update the assignment map.
      *
      * We also update the function_genome map to record which functions appear
      * in which genomes.
@@ -306,6 +309,7 @@ public:
 
 	const boost::regex genome_regex("\\s+(.*)\\s+\\[([^]]+)\\]$");
 	const boost::regex figid_regex("fig\\|(\\d+\\.\\d+)");
+	const boost::regex genome_id_regex("\\d+\\.\\d+");
 	
 	fs::ifstream ifstr(file);
 
@@ -313,7 +317,7 @@ public:
 
 	std::string genome;
 
-	parser.set_def_callback([this, &genome, &genome_regex, &figid_regex, &file, keep_function_flag]
+	parser.set_def_callback([this, &genome, &genome_regex, &figid_regex, &genome_id_regex, &file, keep_function_flag]
 				(const std::string &id, const std::string &def, const std::string &seq) {
 		if (id.empty())
 		    return 0;
@@ -323,8 +327,13 @@ public:
 		//
 		// Need to always parse for [genome]
 		//
-		
-		std::string func = def;
+
+		std::string func;
+		if (!def.empty())
+		{
+		    size_t x = def.find_first_not_of(" \t");
+		    func = def.substr(x);
+		}
 		std::string genome_loc;
 		if (boost::regex_match(def, match, genome_regex))
 		{
@@ -341,41 +350,47 @@ public:
 			{
 			    genome = match[1];
 			}
-			else
-			{
-			    std::cerr << "cannot determine genome from file " << file << "\n";
-			    // default it to the file, just to have a value
-			    genome = file.leaf().string();
-			}
 		    }
 		    else
 		    {
-			if (genome_loc.empty())
-			{
-			    std::cerr << "cannot determine genome from file " << file << "\n";
-			    // default it to the file, just to have a value
-			    genome = file.leaf().string();
-			}
-			else
+			if (!genome_loc.empty())
 			{
 			    genome = genome_loc;
 			}
 		    }
 		}
+		if (genome.empty())
+		{
+		    // default it to the file, just to have a value
+		    genome = file.leaf().string();
+		    
+		    if (!boost::regex_match(genome, genome_id_regex))
+		    {
+			std::cerr << "cannot determine genome from file " << file << "\n";
+		    }
+		}
 
 		/*
+		 *
+		 * If the current-function map has a value, use that. We assume explicit setting
+		 * of functions overrides what is in the fasta.
+		 *
 		 * If we're assigning a function, update the id to function
 		 * map.
 		 *
 		 * Then look up the function for this id and add to the function_genome map.
 		 */
-		if (func.empty())
+		std::string cur_func = id_function_map_[id];
+		if (cur_func.empty())
 		{
-		    func = id_function_map_[id];
+		    if (!func.empty())
+		    {
+			id_function_map_[id] = func;
+		    }
 		}
 		else
 		{
-		    id_function_map_[id] = func;
+		    func = cur_func;
 		}
 		
 		if (func.empty())
@@ -482,7 +497,7 @@ public:
 	}
 	for (auto x: id_function_map_)
 	{
-	    std::cout << x.first << " " << x.second << "\n";
+	    std::cout << x.first << " '" << x.second << "'\n";
 	}
     }
 
@@ -513,6 +528,27 @@ public:
 	}
     }
 
+    // Create a function-array for compatibility with kguts
+    char **create_kg_function_array(int *size) {
+	int n = function_index_map_.size();
+	char **ret = (char **) malloc(sizeof(char *) * n);
+	
+	for (auto ent: function_index_map_)
+	{
+	    if (ent.second >= n)
+	    {
+		std::cerr << "Bad ent=" << ent.second << " for n=" << n << "\n";
+		exit(1);
+	    }
+	    ret[ent.second] = const_cast<char *>(ent.first.c_str());
+	}
+	//for (int i = 0; i < n;  i++)
+	//    std::cerr << i << ": '" << ret[i] << "'\n";
+	*size = n;
+	return ret;
+    }
+	
+
     void add_good_roles(const std::vector<std::string> &r) {
 	std::copy(r.begin(), r.end(), std::inserter(good_roles_, good_roles_.end()));
     }
@@ -539,11 +575,17 @@ void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned &next_sequence
     if (id.empty())
 	return;
 
+    /*
+     * CHECK THIS: we should be using using functions from our database.
     std::string func = def;
     if (func.empty())
     {
 	func = fm.lookup_function(id);
     }
+     */
+
+    std::string func = fm.lookup_function(id);
+    
     /*
      * Empty means empty (and perhaps deleted feature).
      */
@@ -567,7 +609,6 @@ void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned &next_sequence
         int n = std::distance(it, seq.end());
 	Kmer kmer;
 	Kmer::iterator kiter = kmer.begin();
-	auto this_char = it;
 	bool ok = true;
 	std::copy_n(it, K, kmer.begin());
 	for (auto x: kmer)
@@ -849,17 +890,29 @@ KmerGuts *write_hashtable(const fs::path &dir, tbb::concurrent_vector<KeptKmer> 
 	kguts->insert_kmer(kguts->encoder_.encoded_aa_kmer(k.kmer),
 			  k.function_index, k.otu_index, k.median_offset, k.weight);
     }
-    kguts->save_kmer_hash_table((dir / "kmer.table.mem_map").string());
+    if (!dir.empty())
+    {
+	kguts->save_kmer_hash_table((dir / "kmer.table.mem_map").string());
+    }
     return kguts;
 }
 
-int recall_sequence(FunctionMap &fm, KmerGuts *kguts,
-		    fs::ofstream &calls_stream, fs::ofstream &new_stream,
+struct RecallData
+{
+    std::string new_function;
+    std::string old_function;
+    float score;
+    float weighted_score;
+    float score_offset;
+};
+
+std::experimental::optional<RecallData> recall_sequence(FunctionMap &fm, KmerGuts *kguts,
+//		    fs::ofstream &calls_stream, fs::ofstream &new_stream,
 		    const std::string &id, const std::string &seq)
 {
 
     if (id.empty())
-	return 0;
+	return {};
     typedef std::vector<KmerCall> call_vector_t;
     std::shared_ptr<call_vector_t> calls_ = std::make_shared<call_vector_t>();
     call_vector_t &calls = *calls_;
@@ -877,24 +930,12 @@ int recall_sequence(FunctionMap &fm, KmerGuts *kguts,
     */
 	    
     int best_fi;
-    float best_score;
-    float best_weighted_score;
-    std::string best_func;
-    kguts->find_best_call(calls, best_fi, best_func, best_score, best_weighted_score);
+    RecallData ret;
+    kguts->find_best_call(calls, best_fi, ret.new_function, ret.score, ret.weighted_score, ret.score_offset);
 
-    auto old = fm.lookup_function(id);
+    ret.old_function = fm.lookup_function(id);
 
-    if (!best_func.empty())
-    {
-	if (best_func != old)
-	{
-	    new_stream << id << "\t" << old << "\t" << best_func << "\n";
-	}
-	
-	calls_stream << id << "\t" << best_func << "\t" << best_score << "\t" << best_weighted_score << "\n";
-    }
-	    
-    return 0;
+    return ret;
 }
 
 /*
@@ -916,13 +957,72 @@ void recall_fasta(FunctionMap &fm, const fs::path &file, KmerGuts *kguts,
 
     FastaParser parser;
     
-    using namespace std::placeholders;
-    // bringing in boost made _1/_2 ambiguous even with the namespace decl
-    
-    parser.set_callback(std::bind(&recall_sequence, fm, kguts, std::ref(calls_stream), std::ref(new_stream),
-				  std::placeholders::_1, std::placeholders::_2));
+    auto cb = [&fm, kguts, &calls_stream, &new_stream](const std::string &id, const std::string &seq) {
+	auto res = recall_sequence(fm, kguts, id, seq);
+	if (res)
+	{
+	    if (res->new_function != res->old_function)
+	    {
+		new_stream << id << "\t" << res->old_function << "\t" << res->new_function << "\n";
+	    }
+	
+	    calls_stream << id << "\t" << res->new_function << "\t" << res->score << "\t" << res->weighted_score << "\n";
+	}
+	return 0;
+    };
+	    
+    parser.set_callback(cb);
+
     parser.parse(ifstr);
     parser.parse_complete();
+}
+
+/*
+ * Validate a fasta file using our just-computed signatures.
+ *
+ */
+void validate_fasta(FunctionMap &fm, const fs::path &file, KmerGuts *kguts,
+		    FunctionMap &correct_calls, bool verbose)
+{
+    fs::ifstream ifstr(file);
+
+    FastaParser parser;
+    int n_correct = 0, n_incorrect = 0, n_missing = 0;
+    int count = 0;
+    
+    auto cb = [&fm, kguts, &correct_calls, &n_correct, &n_incorrect, &n_missing, &count, verbose](const std::string &id, const std::string &seq) {
+	auto res = recall_sequence(fm, kguts, id, seq);
+	std::string correct_function = correct_calls.lookup_function(id);
+
+	count++;
+	
+	if (res)
+	{
+	    if (res->new_function == correct_function)
+	    {
+		n_correct++;
+	    }
+	    else
+	    {
+		if (verbose)
+		    std::cout << "incorrect\t" << id << "\t" << correct_function << "\t" << res->new_function << std::endl;
+		n_incorrect++;
+	    }
+	}
+	else
+	{
+	    if (!correct_function.empty())
+		n_missing++;
+	}
+	return 0;
+    };
+	    
+    parser.set_callback(cb);
+
+    parser.parse(ifstr);
+    parser.parse_complete();
+
+    std::cout << file << ": count=" << count << " correct=" << n_correct << " incorrect=" << n_incorrect << " missing=" << n_missing << std::endl;
 }
 
 
@@ -976,6 +1076,8 @@ bool process_command_line_options(int argc, char *argv[],
 				  std::vector<std::string> &good_roles,
 				  int &min_reps_required,
 				  fs::path &recall_output_path,
+				  fs::path &validation_folder_path,
+				  bool &validation_verbose,
 				  int &recall_min_hits,
 				  int &recall_max_gap,
 				  fs::path &kmer_data_dir,
@@ -993,6 +1095,7 @@ bool process_command_line_options(int argc, char *argv[],
     std::vector<std::string> good_role_files;
 
     std::string recall_output;
+    std::string validation_folder;
 
     recall_min_hits = 5;
     recall_max_gap = 200;
@@ -1000,8 +1103,8 @@ bool process_command_line_options(int argc, char *argv[],
     n_threads = 1;
 
     desc.add_options()
-	("definition-dir,D", po::value<std::vector<std::string>>(&definition_dirs), "Directory of function definition files")
-	("fasta-dir,F", po::value<std::vector<std::string>>(&fasta_dirs), "Directory of fasta files of protein data")
+	("definition-dir,D", po::value<std::vector<std::string>>(&definition_dirs)->multitoken(), "Directory of function definition files")
+	("fasta-dir,F", po::value<std::vector<std::string>>(&fasta_dirs)->multitoken(), "Directory of fasta files of protein data")
 	("fasta-keep-functions-dir,K", po::value<std::vector<std::string>>(&fasta_keep_dirs), "Directory of fasta files of protein data (keep functions defined here)")
 	("good-functions", po::value<std::vector<std::string>>(&good_function_files), "File containing list of functions to be kept")
 	("good-roles", po::value<std::vector<std::string>>(&good_role_files), "File containing list of roles to be kept")
@@ -1009,6 +1112,8 @@ bool process_command_line_options(int argc, char *argv[],
 	("min-reps-required", po::value<int>(&min_reps_required), "Minimum number of genomes a function must be seen in to be considered for kmers")
 	("final-kmers", po::value<fs::path>(&final_kmers), "Write final.kmers file to be consistent with km_build_Data")
 	("recall-output", po::value<std::string>(&recall_output), "Recall proteins and write output to this path")
+	("validation-folder", po::value<std::string>(&validation_folder), "Call proteins from this folder and write statistics")
+	("validation-verbose", po::bool_switch(&validation_verbose)->default_value(false), "Emit verbose output during validation")
 	("recall-min-hits", po::value<int>(&recall_min_hits), "min-hits parameter to use in recall")
 	("recall-max-gap", po::value<int>(&recall_max_gap), "max_gaps parameter to use in recall")
 	("n-threads", po::value<int>(&n_threads), "Number of threads to use")
@@ -1033,12 +1138,30 @@ bool process_command_line_options(int argc, char *argv[],
     populate_path_list(fasta_dirs, fasta_data);
     populate_path_list(fasta_keep_dirs, fasta_data_kept_functions);
 
+    std::cout << "definitions: ";
+    for (auto x: definition_dirs)
+	std::cout << x << " ";
+    std::cout << std::endl;
+    std::cout << "fasta: ";
+    for (auto x: fasta_dirs)
+	std::cout << x << " ";
+    std::cout << std::endl;
+    std::cout << "keep: ";
+    for (auto x: fasta_keep_dirs)
+	std::cout << x << " ";
+    std::cout << std::endl;
+
     load_strings(good_function_files, good_functions);
     load_strings(good_role_files, good_roles);
 
     if (!recall_output.empty())
     {
 	recall_output_path = recall_output;
+    }
+    
+    if (!validation_folder.empty())
+    {
+	validation_folder_path = validation_folder;
     }
     
     return true;
@@ -1065,11 +1188,14 @@ int main(int argc, char *argv[])
     fs::path final_kmers;
     fs::path kmer_data_dir;
 
+    fs::path validation_folder;
+    bool validation_verbose = false;
+
     int min_reps_required = 5;
 
     int recall_min_hits;
     int recall_max_gap;
-
+    
     int n_threads;
 
     if (!process_command_line_options(argc, argv,
@@ -1080,6 +1206,8 @@ int main(int argc, char *argv[])
 				      good_roles,
 				      min_reps_required,
 				      recall_output_path,
+				      validation_folder,
+				      validation_verbose,
 				      recall_min_hits,
 				      recall_max_gap,
 				      kmer_data_dir,
@@ -1173,31 +1301,34 @@ int main(int argc, char *argv[])
 	all_fasta_data.emplace_back(fasta);
     }
 
-    //fm.dump();
+    // fm.dump();
     /*
      * Process the list of functions and
      * manage the set that we want to keep.
      */
     fm.process_kept_functions(min_reps_required);
-    write_function_index(kmer_data_dir, fm);
-    /* Write an empty otu index and genomes file (genomes file
-     * can't be empty because kmer_search uses "-s genomes" to test
-     * for its existence). */
+    if (!kmer_data_dir.empty())
     {
-	fs::ofstream otu(kmer_data_dir / "otu.index");
-	otu.close();
-	fs::ofstream genomes(kmer_data_dir / "genomes");
-	genomes << "empty genomes\n";
-	genomes.close();
+	write_function_index(kmer_data_dir, fm);
+	/* Write an empty otu index and genomes file (genomes file
+	 * can't be empty because kmer_search uses "-s genomes" to test
+	 * for its existence). */
+	{
+	    fs::ofstream otu(kmer_data_dir / "otu.index");
+	    otu.close();
+	    fs::ofstream genomes(kmer_data_dir / "genomes");
+	    genomes << "empty genomes\n";
+	    genomes.close();
+	}
     }
-
+    
     /*
      * With that done, go ahead and extract kmers.
      */
 
     if (n_threads < 0)
     {
-	for (int i = 0; i < all_fasta_data.size(); i++)
+	for (size_t i = 0; i < all_fasta_data.size(); i++)
 	{
 	    load_fasta(fm, m, i, all_fasta_data[i]);
 	}
@@ -1243,12 +1374,13 @@ int main(int argc, char *argv[])
     std::cerr << "writing hashtable to " << kmer_data_dir << " ...\n";
     KmerGuts *kguts = write_hashtable(kmer_data_dir, kept_kmers);
     std::cerr << "writing hashtable to " << kmer_data_dir << " done\n";
-
+    
     /*
      * Ick.
      */
     fs::path fidx = kmer_data_dir / "function.index";
-    kguts->kmersH->function_array = kguts->load_functions(fidx.c_str(), &kguts->kmersH->function_count);
+    // kguts->kmersH->function_array = kguts->load_functions(fidx.c_str(), &kguts->kmersH->function_count);
+    kguts->kmersH->function_array = fm.create_kg_function_array(&kguts->kmersH->function_count);
     kguts->kmersH->otu_array = kguts->load_otus("/dev/null", &kguts->kmersH->otu_count);
 
     if (!recall_output_path.empty())
@@ -1299,6 +1431,65 @@ int main(int argc, char *argv[])
 	    }
 	}
     }
+
+    if (!validation_folder.empty())
+    {
+	kguts->min_hits = recall_min_hits;
+	kguts->max_gap = recall_max_gap;
+
+	KmerGuts *shared_kguts = kguts;
+
+	/*
+	 * The validation folder will contain a subdirectory
+	 * anno that holds the 2-column table of correct annotations (file per genome), and
+	 * seq that holds the fasta sequence data (file per genome)
+	 *
+	 * For each anno file, read the 2-column table and populate the FunctionMap
+	 * we're (mis)using for the id => correct function hash.
+	 *
+	 * Read the contents of the seq directory to obtain a list of files.
+	 * 
+	 * In parallel, recall and compute scores.
+	 *  
+	 */
+
+	std::vector<fs::path> seq_files;
+	FunctionMap correct_funcs;
+	
+	for (auto dit: fs::directory_iterator(validation_folder / "seq"))
+	{
+	    if (fs::is_regular_file(dit.path()))
+		seq_files.push_back(dit.path());
+	}
+	for (auto dit: fs::directory_iterator(validation_folder / "anno"))
+	{
+	    if (fs::is_regular_file(dit.path()))
+	    {
+		correct_funcs.load_id_assignments(dit.path());
+	    }
+	}
+
+	std::cerr << "starting call of " << seq_files.size() << " genomes with " << n_threads << " threads\n";
+	tbb::parallel_for(tbb::blocked_range<size_t>(0, seq_files.size()),
+			  [&fm, &shared_kguts, &seq_files, recall_min_hits, recall_max_gap, &correct_funcs, validation_verbose]
+			  (const tbb::blocked_range<size_t> &r) {
+
+			      KmerGuts kguts(*shared_kguts);
+			      
+			      std::cout << "Process block:";
+			      for(size_t i=r.begin(); i!=r.end(); ++i)
+				  std::cout << " " << i;
+			      std::cout << " on thread " << std::this_thread::get_id() << "\n";
+			      
+			      for(size_t i=r.begin(); i!=r.end(); ++i)
+			      {
+				  fs::path file = seq_files[i];
+				  std::cerr << "Would compute " << file << std::endl;
+				  validate_fasta(fm, file, &kguts, correct_funcs, validation_verbose);
+			      }
+			  });
+    }
+
     std::cerr << "all done\n";
 
     free(kguts->kmer_image_for_loading_);

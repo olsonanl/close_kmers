@@ -330,6 +330,8 @@ int main(int argc, char* argv[])
     #endif
     io_service.run();
 
+    tp->stop();
+
     #ifdef GPROFILER
     ProfilerStop();
     std::cerr << "profiler disable\n";

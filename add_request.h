@@ -10,14 +10,14 @@
 class AddRequest : public ComputeRequest
 {
 public:
-    AddRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, int content_length, bool chunked = false);
+    AddRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, size_t content_length, bool chunked = false);
     ~AddRequest() { std::cerr << "Destroy addrequest " << this << "\n"; }
     void run();
 
 private:
     bool silent_;
     std::shared_ptr<KmerPegMapping> mapping_;
-    int content_length_;
+    size_t content_length_;
     bool chunked_;
     std::shared_ptr<KmerRequest2> owner_;
     FastaParser parser_;

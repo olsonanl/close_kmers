@@ -24,8 +24,8 @@ KmerRequestServer::KmerRequestServer(boost::asio::io_service& io_service,
     signals_(io_service_),
     port_(port),
     port_file_(port_file),
-    load_state_("master"),
-    family_reps_(0)
+    family_reps_(0),
+    load_state_("master")
     
 {
     mapping_map_ = std::make_shared<std::map<std::string, std::shared_ptr<KmerPegMapping> > >();

@@ -10,7 +10,7 @@ inline std::string make_string(boost::asio::streambuf& streambuf)
 	    buffers_end(streambuf.data())};
 }
 
-MatrixRequest::MatrixRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, int content_length, bool chunked) :
+MatrixRequest::MatrixRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, size_t content_length, bool chunked) :
     mapping_(mapping),
     content_length_(content_length),
     chunked_(chunked),

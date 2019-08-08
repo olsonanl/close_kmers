@@ -169,6 +169,27 @@ inline long long KmerGuts::find_empty_hash_entry(sig_kmer_t sig_kmers[],unsigned
       hash_entry = (hash_entry+1)%size_hash;
     return hash_entry;
 }
+KmerGuts::~KmerGuts() {
+    std::cerr << "delete kguts " << this << "\n";
+    for (auto x: to_be_freed)
+	free(x);
+    if (pIseq)
+	free(pIseq);
+    if (cdata)
+	free(cdata);
+    if (data)
+	free(data);
+    if (pseq)
+	free(pseq);
+
+    if (kmersH)
+    {
+	free(kmersH->function_array);
+	free(kmersH->otu_array);
+	delete kmersH;
+	kmersH = 0;
+    }
+}
 
 void KmerGuts::insert_kmer(const std::string &kmer,
 			   int function_index, int otu_index, unsigned short avg_offset,
@@ -523,6 +544,7 @@ void KmerGuts::translate(const char *seq,int off,char *pseq, unsigned char *pIse
 char **KmerGuts::load_indexed_ar(const char *filename,int *sz) {
     char **index_ar = (char **) malloc(MAX_FUNC_OI_INDEX * sizeof(char *));
     char *vals      = (char *)malloc(MAX_FUNC_OI_VALS);
+    to_be_freed.push_back(vals);
   char *p         = vals;
   FILE *ifp      = fopen(filename,"r");
   if (ifp == NULL) { 
@@ -758,7 +780,7 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
      }
  }
 
- void KmerGuts::gather_hits(size_t ln_DNA, char strand,int prot_off,const char *pseq,
+void KmerGuts::gather_hits(const char *pseq,
 			    unsigned char *pIseq,
 			    std::shared_ptr<std::vector<KmerCall>> calls,
 			    std::function<void(hit_in_sequence_t)> hit_cb,
@@ -776,6 +798,8 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
      while (p < bound) {
 	 long long  where = lookup_hash_entry(kmersH->kmer_table,encodedK);
 
+	 // pLoc is the offset of this kmer in the protein
+	 
 	 unsigned int pLoc = (unsigned int) (p - pIseq);
 	 // std::cerr << p << " " << encodedK << " " << where << "\n";
 	 //for (int i = 0; i < KMER_SIZE; i++)
@@ -788,11 +812,12 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
 	     int oI          = kmers_hash_entry->otu_index;
 	     float f_wt      = kmers_hash_entry->function_wt;
 	     if (hit_cb != nullptr)
-	     {
-
 		 hit_cb(hit_in_sequence_t(*kmers_hash_entry, pLoc));
-	     }
 
+	     /*
+	      * If we are in a run of hits, and the gap between this hit and the start
+	      * of the is greater than our allowed gap, process the hits.
+	      */
 	     if ((num_hits > 0) && (hits[num_hits-1].from0_in_prot + max_gap) < pLoc)
 	     {
 		 if (num_hits >= min_hits)
@@ -877,7 +902,7 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
 	 pIseq[i] = to_amino_acid_off(*(pseq+i));
 
      // std::cerr << "'" << id << "' '" << pseq << "' " << ln << "\n";
-     gather_hits(ln,'+',0,pseq,pIseq, calls, hit_cb, otu_stats);
+     gather_hits(pseq,pIseq, calls, hit_cb, otu_stats);
      if (otu_stats)
 	 otu_stats->finalize();
  }
@@ -897,7 +922,7 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
 	 translate(data,i,pseq,pIseq);
 	 current_strand   = '+';
 	 current_prot_off = i;
-	 gather_hits(ln,'+',i,pseq,pIseq, calls, hit_cb, otu_stats);
+	 gather_hits(pseq,pIseq, calls, hit_cb, otu_stats);
      }
      rev_comp(data,cdata);
      for (i=0; (i < 3); i++) {
@@ -905,7 +930,7 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
 
 	 current_strand   = '-';
 	 current_prot_off = i;
-	 gather_hits(ln,'-',i,pseq,pIseq, calls, hit_cb, otu_stats);
+	 gather_hits(pseq,pIseq, calls, hit_cb, otu_stats);
      }
      if (otu_stats)
 	 otu_stats->finalize();

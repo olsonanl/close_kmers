@@ -11,6 +11,7 @@
 #include <string>
 #include <set>
 #include <memory>
+#include <experimental/optional>
 #include <boost/asio.hpp>
 #include <boost/timer/timer.hpp>
 #include <ostream>
@@ -66,14 +67,22 @@ public:
 
     std::shared_ptr<KmerRequestServer> server() { return server_; }
 
+    std::experimental::optional<std::string> header(const std::string &c) const {
+	auto x = headers_.find(c);
+	if (x == headers_.end())
+	    return {};
+	else
+	    return x->second;
+    }
+
+    void respond(int code, const std::string &status, const std::string &result, std::function<void()> on_done);
+
 private:
 
     void read_initial_line(boost::system::error_code err, size_t bytes);
     void read_headers(boost::system::error_code err, size_t bytes);
 
     void process_request();
-
-    void respond(int code, const std::string &status, const std::string &result, std::function<void()> on_done);
 
     std::shared_ptr<KmerRequestServer> server_;
 

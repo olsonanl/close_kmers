@@ -19,6 +19,7 @@
 #include "matrix_request.h"
 #include "query_request.h"
 #include "lookup_request.h"
+#include "fq_process_request.h"
 #include "debug.h"
 
 const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(\\d+\\.\\d+)");
@@ -37,7 +38,7 @@ KmerRequest2::KmerRequest2(std::shared_ptr<KmerRequestServer> server,
     server_(server),
     io_service_(io_service),
     socket_(io_service_),
-    request_(65536),
+    request_(1048576),
     mapping_map_(mapping_map),
     thread_pool_(thread_pool)
    
@@ -419,7 +420,7 @@ void KmerRequest2::process_request()
 	    return;
 	}
 
-	int len = std::stoi(x->second);
+	size_t len = std::stoul(x->second);
 
 	std::shared_ptr<KmerPegMapping> mapping;
 	std::string key("");
@@ -466,6 +467,12 @@ void KmerRequest2::process_request()
 	else if (action == "/lookup")
 	{
 	    auto lookup_request = std::make_shared<LookupRequest>(shared_from_this(), mapping, server_->family_mode(), len);
+	    lookup_request->run();
+	    active_request_ = lookup_request;
+	}   
+	else if (action == "/fq_lookup")
+	{
+	    auto lookup_request = std::make_shared<FqProcessRequest>(shared_from_this(), mapping, server_->family_mode(), len);
 	    lookup_request->run();
 	    active_request_ = lookup_request;
 	}   

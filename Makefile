@@ -9,7 +9,8 @@ export PATH
 CXX = $(BUILD_TOOLS)/bin/g++
 BOOST = $(BUILD_TOOLS)
 #BOOST = /scratch/olson/boost
-STDCPP = -std=c++14 
+#STDCPP = -std=c++14 
+STDCPP = -std=c++1y
 THREADLIB = -lpthread -lrt
 
 CXX_LDFLAGS = -Wl,-rpath,$(BUILD_TOOLS)/lib64
@@ -143,6 +144,7 @@ CFLAGS = $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) -Wconversion -Wall
 LDFLAGS = $(TBB_LDFLAGS) $(CXX_LDFLAGS) $(PROFILE)
 
 LIBS = $(BOOST)/lib/libboost_system.a \
+	$(BOOST)/lib/libboost_log.a \
 	$(BOOST)/lib/libboost_filesystem.a \
 	$(BOOST)/lib/libboost_timer.a \
 	$(BOOST)/lib/libboost_chrono.a \
@@ -156,7 +158,8 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BLCR_LIB) \
 	$(TBB_LIB) \
 	$(NUMA_LIBS) \
-	$(LOG4CPP_LIB)
+	$(LOG4CPP_LIB) \
+	-lz
 
 x.o: x.cc kguts.h
 
@@ -166,6 +169,9 @@ tr: tr.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 xx: xx.o
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+
+logtest: logtest.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 tkguts: tkguts.o kguts.o kmer_image.o 
@@ -181,7 +187,7 @@ fastq_to_protein: fastq_to_protein.o fastq_parser.o trans_table.o dna_seq.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 test_family_mapper: test_family_mapper.o fasta_parser.o kguts.o family_mapper.o \
-	kmer.o kmer_image.o kmer_inserter.o nr_loader.o threadpool.o
+	kmer.o kmer_image.o kmer_inserter.o nr_loader.o threadpool.o kmer_encoder.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
 build_signature_kmers: build_signature_kmers.o fasta_parser.o kguts.o kmer_image.o kmer_encoder.o
@@ -204,8 +210,9 @@ kc: kc.o kmer.o kserver.o krequest.o
 
 kser: kser.o kmer.o kserver.o kguts.o \
 	fasta_parser.o krequest2.o add_request.o threadpool.o matrix_request.o query_request.o lookup_request.o \
+	fq_process_request.o fastq_parser.o zlib_support.o dna_seq.o trans_table.o family_mapper.o \
 	md5.o kmer_image.o numa.o kmer_inserter.o family_reps.o nr_loader.o kmer_encoder.o
-	$(CXX) $(LDFLAGS) $(OPT) -o kser $^ $(LIBS)
+	$(CXX) $(LDFLAGS) $(OPT) -o kser $^ $(LIBS) 
 
 tst_family_reps: family_reps.o tst_family_reps.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
@@ -238,6 +245,12 @@ family_reps.o: family_reps.h
 fasta_parser.o: fasta_parser.h
 fastq_parser.o: fastq_parser.h
 fastq_to_protein.o: fastq_parser.h trans_table.h dna_seq.h
+fq_process_request.o: fq_process_request.h compute_request.h krequest2.h
+fq_process_request.o: kmer.h klookup.h kguts.h kmer_image.h kmer_params.h
+fq_process_request.o: kmer_encoder.h fasta_parser.h klookup2.h klookup3.h
+fq_process_request.o: threadpool.h numa.h fastq_parser.h prot_seq.h
+fq_process_request.o: zlib_support.h dna_seq.h trans_table.h kserver.h
+fq_process_request.o: kmer_inserter.h family_reps.h nr_loader.h global.h
 kc.o: kmer.h kserver.h kmer_inserter.h krequest2.h klookup.h kguts.h
 kc.o: kmer_image.h kmer_params.h kmer_encoder.h fasta_parser.h klookup2.h
 kc.o: klookup3.h compute_request.h threadpool.h numa.h family_reps.h
@@ -260,7 +273,8 @@ krequest2.o: kmer_encoder.h fasta_parser.h klookup2.h klookup3.h
 krequest2.o: compute_request.h threadpool.h numa.h kserver.h kmer_inserter.h
 krequest2.o: family_reps.h nr_loader.h global.h add_request.h
 krequest2.o: matrix_request.h prot_seq.h query_request.h lookup_request.h
-krequest2.o: debug.h
+krequest2.o: fq_process_request.h fastq_parser.h zlib_support.h dna_seq.h
+krequest2.o: trans_table.h debug.h
 krequest.o: krequest.h kmer.h klookup.h kguts.h kmer_image.h kmer_params.h
 krequest.o: kmer_encoder.h fasta_parser.h klookup2.h klookup3.h global.h
 kser.o: global.h kmer.h kserver.h kmer_inserter.h krequest2.h klookup.h
@@ -299,3 +313,4 @@ unique_prots.o: fasta_parser.h
 validate_fasta.o: fasta_parser.h
 validate_fastq.o: fastq_parser.h trans_table.h dna_seq.h
 x.o: kguts.h kmer_image.h kmer_params.h kmer_encoder.h
+zlib_support.o: zlib_support.h

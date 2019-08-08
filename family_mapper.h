@@ -14,7 +14,7 @@
 class FamilyMapper
 {
 public:
-    FamilyMapper(std::shared_ptr<KmerGuts> kguts,
+    FamilyMapper(KmerGuts *kguts,
 		 std::shared_ptr<KmerPegMapping> mapping);
 
     struct best_match_t {
@@ -24,10 +24,11 @@ public:
 	float lfam_score;
 	std::string function;
 	float score;
+	friend bool operator<(const best_match_t &l, const best_match_t &r) { return l.score < r.score; };
     };
 
     best_match_t find_best_family_match(const std::string &id, const std::string &seq);
-    void find_all_matches(const std::string &id, const std::string &seq);
+    void find_all_matches(std::ostream &os, const std::string &id, const std::string &seq);
 
     struct sequence_accumulated_score_t {
 	unsigned int hit_count;
@@ -56,12 +57,12 @@ private:
 
     bool find_best_match_;
     bool family_mode_;
-    int kmer_hit_threshold_;
+    unsigned int kmer_hit_threshold_;
     bool allow_ambiguous_functions_;
     std::shared_ptr<KmerPegMapping> mapping_;
-    int target_genus_id_;
+    unsigned long target_genus_id_;
     bool find_reps_;
-    std::shared_ptr<KmerGuts> kguts_;
+    KmerGuts *kguts_;
     typedef std::vector<KmerCall> call_vector_t;
     std::shared_ptr<call_vector_t> calls_;
 };

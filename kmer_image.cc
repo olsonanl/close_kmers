@@ -13,7 +13,9 @@
 #include <boost/program_options.hpp>
 
 KmerImage::KmerImage(const std::string &data_dir)
-    : data_dir_(data_dir)
+    : image_(0)
+    , image_size_(0)
+    , data_dir_(data_dir)
 {
     attach();
 }

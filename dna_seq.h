@@ -20,8 +20,8 @@ public:
 
 
 private:
-    const std::string id_;
-    const std::string seq_;
+    const std::string &id_;
+    const std::string &seq_;
 
     std::string reverse_seq_;
 

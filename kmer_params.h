@@ -11,6 +11,9 @@ const CORE = 20L*20L*20L*20L;
 #if KMER_SIZE == 8
 const unsigned long long CORE = 20L*20L*20L*20L*20L*20L*20L;
 #endif
+#if KMER_SIZE == 12
+const unsigned long long CORE = 20L*20L*20L*20L*20L*20L*20L*20L*20L*20L*20L;
+#endif
 
 #define MAX_ENCODED CORE*20L 
 
