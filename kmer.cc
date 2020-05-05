@@ -106,7 +106,7 @@ void KmerPegMapping::load_mapping_file(const std::string &mapping_file)
 	size_t i1 = line.find('\t');
 	unsigned long kmer = std::stoul(line.substr(0, i1));
 	i1 = line.find('|', i1 + 1);
-	size_t i2 = line.find('p', i1 + 1);
+	size_t i2 = line.find_first_of("pC", i1 + 1);
 	i1 = line.find('.', i2);
 	i2 = line.find('\t', i1);
 
@@ -299,7 +299,7 @@ std::string KmerPegMapping::decode_id(encoded_id_t id)
 KmerPegMapping::encoded_id_t KmerPegMapping::encode_id(const std::string &peg)
 {
     size_t i1 = peg.find('|');
-    size_t i2 = peg.find('p', i1 + 1);
+    size_t i2 = peg.find_first_of("Cp", i1 + 1);
     std::string genome = peg.substr(i1 + 1, i2 - i1 - 2);
     i1 = peg.find('.', i2);
     std::string fid = peg.substr(i1 + 1);
