@@ -18,9 +18,10 @@ public:
     ~ThreadPool();
     
     void start(int n_threads);
+    void add_threads(int n_threads);
     void stop();
 
-    int size() const { return thread_pool_.size(); }
+    size_t size() const { return thread_pool_.size(); }
 
     template <typename CompletionHandler>
 	BOOST_ASIO_INITFN_RESULT_TYPE(CompletionHandler, void ())
@@ -32,6 +33,8 @@ public:
     Numa numa_;
 #endif
 
+    int next_thread_id_;
+    
     std::string kmer_dir_;
     std::unique_ptr<boost::asio::io_service::work> work_;
 

@@ -9,13 +9,13 @@ inline std::string make_string(boost::asio::streambuf& streambuf)
 	    buffers_end(streambuf.data())};
 }
 
-QueryRequest::QueryRequest(std::shared_ptr<KmerRequest2> owner, int content_length, bool chunked) :
-    owner_(owner),
-    parser_(std::bind(&QueryRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
+QueryRequest::QueryRequest(std::shared_ptr<KmerRequest2> owner, size_t content_length, bool chunked) :
     content_length_(content_length),
     chunked_(chunked),
+    owner_(owner),
     header_written_(false)
 {
+    parser_.set_callback(std::bind(&QueryRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void QueryRequest::run()
@@ -94,6 +94,12 @@ void QueryRequest::on_data(boost::system::error_code err, size_t bytes)
 		    details = std::stoi(owner_->parameters()["details"]);
 		} catch (...) {}
 
+		int find_best_call = 0;
+		try {
+		    find_best_call = std::stoi(owner_->parameters()["find_best_call"]);
+		} catch (...) {}
+
+
 		for (auto x: *cur)
 		{
 		    auto id = x.first;
@@ -101,6 +107,7 @@ void QueryRequest::on_data(boost::system::error_code err, size_t bytes)
 		    
 		    auto calls = std::make_shared<std::vector<KmerCall> >();
 		    auto stats = std::make_shared<KmerOtuStats>();
+
 		    std::shared_ptr<std::vector<KmerGuts::hit_in_sequence_t> > hits = 0;
 		    if (details)
 		    {
@@ -111,19 +118,37 @@ void QueryRequest::on_data(boost::system::error_code err, size_t bytes)
 		    {
 			kguts->process_aa_seq(id, seq, calls, 0, stats);
 		    }
-		    os << "PROTEIN-ID\t" << id << "\t" << seq.size() << "\n";
-		    for (auto c: *calls)
+
+		    
+
+		    if (find_best_call)
 		    {
-			os << kguts->format_call(c);
-		    }
-		    if (details)
-		    {
-			for (auto h: *hits)
+			int best_call_fi;
+			float best_call_score, best_call_weighted_score, best_call_score_offset;
+			std::string best_call_function;
+			kguts->find_best_call(*calls, best_call_fi, best_call_function, best_call_score,
+					      best_call_weighted_score, best_call_score_offset);
+			if (!best_call_function.empty())
 			{
-			    os << kguts->format_hit(h);
+			    os << id << "\t" << best_call_function << "\t" << best_call_score << "\t" << best_call_weighted_score << "\n";
 			}
 		    }
-		    os << kguts->format_otu_stats(x.first, x.second.size(), *stats);
+		    else
+		    {
+			os << "PROTEIN-ID\t" << id << "\t" << seq.size() << "\n";
+			for (auto c: *calls)
+			{
+			    os << kguts->format_call(c);
+			}
+			if (details)
+			{
+			    for (auto h: *hits)
+			    {
+				os << kguts->format_hit(h);
+			    }
+			}
+			os << kguts->format_otu_stats(x.first, x.second.size(), *stats);
+		    }
 		}
 		owner_->io_service().post([this, sbuf, err](){
 			/*
@@ -161,4 +186,5 @@ void QueryRequest::on_data(boost::system::error_code err, size_t bytes)
 int QueryRequest::on_parsed_seq(const std::string &id, const std::string &seq)
 {
     current_work_->push_back(std::make_pair(id, seq));
+    return 0;
 }

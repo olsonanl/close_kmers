@@ -1,0 +1,144 @@
+Notes on the family scoring.
+
+Given an amino acid sequence S, we compute hits using KmerGuts::gather_hits:
+
+     For each kmer in S that does not contain any ambiguity characters, 
+     search for a match in the signature kmer database. We accumulate runs
+     of hits with the same function that do not incorporate gaps larger
+     than the max_gaps parameter. A score is assigned for each run
+     which is the total number of kmer hits in that run. 
+     
+     A run is also terminated if two hits in a row for a different function are seen. 
+
+We may have several runs of hits. For example:
+
+PROTEIN-ID      fig|1643353.45.peg.2792 234
+CALL    10      86      6       7241    DNA gyrase subunit B (EC 5.99.1.3)      8.7125
+CALL    99      129     12      7241    DNA gyrase subunit B (EC 5.99.1.3)      31.9442
+CALL    162     173     5       7507    DNA topoisomerase IV subunit B (EC 5.99.1.3)    9.1869
+CALL    182     216     10      7241    DNA gyrase subunit B (EC 5.99.1.3)      21.9685
+OTU-COUNTS      fig|1643353.45.peg.2792[234]    3-127   1-425   1-818   1-785   1-753
+
+Each CALL line is a run of hits. The numbers are start and end of the run (in amino acids), the
+count of matching kmers, the function index, the associated function, and the total weighted hits. 
+
+If we look at the detailed kmer hits that come out of this example we can see the two-hit 
+termination rule in action:
+
+HIT	    EPQFQGQT	4	DNA topoisomerase IV subunit B (EC 5.99.1.3)
+HIT	    PQFQGQTK	5	DNA topoisomerase IV subunit B (EC 5.99.1.3)
+HIT	    QFQGQTKG	6	DNA topoisomerase IV subunit B (EC 5.99.1.3)
+HIT	    QTKGKLGN	10	DNA gyrase subunit B (EC 5.99.1.3)
+HIT	    TKGKLGNS	11	DNA gyrase subunit B (EC 5.99.1.3)
+HIT	    KGKLGNSY	12	DNA gyrase subunit B (EC 5.99.1.3)
+HIT	    GKLGNSYV	13	DNA gyrase subunit B (EC 5.99.1.3)
+HIT	    KLGNSYVK	14	DNA gyrase subunit B (EC 5.99.1.3)
+HIT	    PQEFDRIF	40	hypothetical protein
+HIT	    EFDRIFEK	42	ABC transporter, substrate-binding protein (cluster 5, nickel/peptides/opines)
+HIT	    FDRIFEKI	43	protein of unknown function DUF323
+HIT	    ELSARARL	51	hypothetical protein
+HIT	    VIAKESII	61	Acetate kinase (EC 2.7.2.1)
+HIT	    KESIIRKN	64	Aspartate aminotransferase (EC 2.6.1.1)
+HIT	    IIRKNVLS	67	Response regulator
+HIT	    PGKLADCR	79	DNA gyrase subunit B (EC 5.99.1.3)
+HIT	    GTELFLVE	92	DNA topoisomerase IV subunit B (EC 5.99.1.3)
+HIT	    TELFLVEG	93	DNA topoisomerase IV subunit B (EC 5.99.1.3)
+HIT	    EGDSAGGT	99	DNA gyrase subunit B (EC 5.99.1.3)
+HIT	    GDSAGGTA	100	DNA gyrase subunit B (EC 5.99.1.3)
+HIT	    DSAGGTAK	101	DNA gyrase subunit B (EC 5.99.1.3)
+HIT	    SAGGTAKQ	102	DNA gyrase subunit B (EC 5.99.1.3)
+
+The run of hits starting at 10 thru 79 is terminated when the hits at 92 and 93 are seen.
+
+We use KmerGuts::find_best_call to process that data to determine the call we will give the protein.
+Historical note: this routine is a port of the km_process_hits_to_regions | km_pick_best_hit_in_peg 
+pipeline from the SEED infrastructure. 
+
+The find_best_call algorithm is as follows:
+
+    Merge any adjacent runs to form a single longer run. We 
+    accumulate the hit counts into the merged run and set the endpoints
+    to be the start of the first run and the end of the last run.
+
+    Merge any runs where two runs of the same function surround a 
+    run with a different function when the score for the interior
+    run is less than 5 and the combined scores for the exterior
+    runs is 10 or more. The interior run is discarded.
+
+    From the remaining runs, determine the run with the best score	
+    to be assigned the call for the protein. We compute a total
+    score per function for the runs in the protein. 
+
+    If there is only one function seen, that is declared to be the function
+    for the protein.
+
+    If there is more than one, call F1 and F2 the top two functions with
+    cumulative scores of S1 and S2. We compute the score offset as S1 - S2.
+    If the offset is > 5, we declare F1 to be the function. 
+
+    If the offset is <= 5, we have an ambiguous determination. We may optionally 
+    call F1 ?? F2 as the function.
+
+In our example above, we will first merge the first two calls into a new call giong from 10 to 129 with a score of 18:
+
+CALL    10      129     18      7241    DNA gyrase subunit B (EC 5.99.1.3)      40.6567
+CALL    162     173     5       7507    DNA topoisomerase IV subunit B (EC 5.99.1.3)    9.1869
+CALL    182     216     10      7241    DNA gyrase subunit B (EC 5.99.1.3)      21.9685
+
+We have the case were there two runs with the same function surrounding a run with a different 
+function, but the interior score of 5 is not small enough to trigger the merge so we leave it in place.
+
+We now compute our total scores by function:
+
+DNA gyrase subunit B (EC 5.99.1.3) score=28, weighted = 62.6252
+DNA topoisomerase IV subunit B (EC 5.99.1.3) score=5, weighted = 9.1869.
+
+The score offset is 23 for the gyrase, so that is the assigned function for this protein
+with a score of 28 and a weighted score of 62.6252.
+
+We now consider the placement of a query protein Q into a protein family. This algorithm is dependent on a 
+precomputed mapping of signature kmer to associated families. 
+
+Details below. In English:
+
+    Call the function for Q as C.
+    For each signature Kmer in Q, look up the families that contain the kmer.
+    Discard any families whose function is not C
+    For the remaining families, we accumulate the number of kmers seen for each family, as well
+    as an accumulated weighted total.
+    The weighted total accumulates 1/N per kmer, where N is the number of families to which the 
+    kmer maps.
+    Discard any families where the accumulated hit count is < 3.
+    The family with the largest weighted total is set as the preferred family. If we have a target
+    genus, we consider the families whose local family matches the genus, and determine the 
+    family there with the largest total. This is the preferred local family.
+
+Detailed description:
+
+We initialize a mapping SeqScore from family ID => AccumulatedScore. An AccumulatedScore contains
+running totals HitCount, HitTotal, and WeightedTotal.
+
+We begin by computing the runs of hits for A as discussed above. In addition
+to computing the runs, we perform a lookup on each signature kmer match (these correspond to the
+HIT lines in the example above). 
+
+For each hit, we look up the set of family IDs to which the kmer matches. 
+
+Let N be the number of families matched.
+For each family F in the set, set SeqScore[F].HitCount++ and SeqScore[F].WeightedTotal += 1/N.
+
+Let C be the best call for Q. If there is no best call, set C to "hypothetical protein".
+
+For each entry (family-id, hit-count, weighted-total) in SeqScore:
+
+    if hit-count < kmer_hit_threshold (default 3), discard the entry
+
+    Look up the PGF for this entry. If the function is not C, discard the entry
+
+    Add weighted-total to PGF-rollup[PGF]
+
+    if the family genus matches our target genus, and weighted score > best-lf score,
+       set best-lf to this family
+
+of the matching PGF-rollup entries, find the one with the best score.
+

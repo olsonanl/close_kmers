@@ -137,24 +137,11 @@ COMMAND LINE ARGUMENTS:
 #include <vector>
 #include <functional>
 #include <algorithm>
+#include <ostream>
 
 #include "kmer_image.h"
-
-#define KMER_SIZE 8
-#define MAX_SEQ_LEN 500000000
-
-#if KMER_SIZE == 5 
-const CORE = 20L*20L*20L*20L;
-#endif
-#if KMER_SIZE == 8
-const unsigned long long CORE = 20L*20L*20L*20L*20L*20L*20L;
-#endif
-
-#define MAX_ENCODED CORE*20L 
-
-#define MAX_HITS_PER_SEQ 40000
-
-#define OI_BUFSZ 5
+#include "kmer_params.h"
+#include "kmer_encoder.h"
 
 class KmerResult
 {
@@ -182,8 +169,17 @@ public:
     unsigned int start;
     unsigned int end;
     int count;
-    int function_index;
+    unsigned int function_index;
     float weighted_hits;
+
+    KmerCall() : start(0), end(0), count(0), function_index(0), weighted_hits(0.0) { }
+    KmerCall(unsigned int s, unsigned int e, int c, unsigned int f, float w)  :
+        start(s), end(e), count(c), function_index(f), weighted_hits(w) { }
+KmerCall(KmerCall &&k) :
+        start(k.start), end(k.end), count(k.count), function_index(k.function_index), weighted_hits(k.weighted_hits) { }
+KmerCall(const KmerCall &k) :
+        start(k.start), end(k.end), count(k.count), function_index(k.function_index), weighted_hits(k.weighted_hits) { }
+
 };
 
 class KmerOtuStats
@@ -226,6 +222,7 @@ class KmerGuts
 {
 public:
 
+    KmerEncoder encoder_;
     typedef struct sig_kmer sig_kmer_t;
 
     struct hit_in_sequence_t {
@@ -240,6 +237,8 @@ public:
 	unsigned long long num_sigs;
 	char **function_array;   /* indexed by fI */
 	char **otu_array;        /* OTU indexes point at a representation of multiple OTUs */
+	int function_count;
+	int otu_count;
     } kmer_handle_t;
 
 /* the following stuff was added to condense sets of hits to specific calls.
@@ -260,18 +259,34 @@ public:
     long long size_hash; /* 1400303159  tot_lookups=13474100 retry=2981020 for 5.contigs 4.684 sec */
     /* 2147483648  tot_lookups=13474100 retry=1736650  */
     /* 1073741824  tot_lookups=13474100 retry=4728020  */
-    int write_mem_map;
     
     hit_t hits[MAX_HITS_PER_SEQ]; 
     int   num_hits;
     struct otu_count oI_counts[OI_BUFSZ];
     int num_oI;
+
+    /*
+     * Count used for loading.
+     */
+    long long kmers_loaded_;
+    kmer_memory_image_t *kmer_image_for_loading_;
+    unsigned long long image_size_for_loading_;
+    sig_kmer_t *sig_kmers_for_loading_;
+
+    void insert_kmer(const std::string &kmer,
+		     int function_index, int otu_index, unsigned short avg_offset,
+		     float function_weight);
+    void insert_kmer(unsigned long long encodedK,
+		     int function_index, int otu_index, unsigned short avg_offset,
+		     float function_weight);
+    void save_kmer_hash_table(const std::string &file);
+     
     
-    int   current_fI;
+    unsigned int   current_fI;
     char  current_id[300];
-    int   current_length_contig;
+    size_t   current_length_contig;
     char  current_strand;
-    short current_prot_off;
+    unsigned short current_prot_off;
     int   order_constraint;
     int   min_hits;
     int   min_weighted_hits;
@@ -285,6 +300,9 @@ public:
     char *data;
     char *cdata;
     char *pseq;
+    // Work around lost pointers to internal allocation from the original kguts code.
+    // This is a list of pointers to be freed when we're done.
+    std::vector<char *> to_be_freed;
 
     int tot_lookups;
     int retry;
@@ -292,18 +310,22 @@ public:
     kmer_handle_t *kmersH;
 
     KmerGuts(const std::string &kmer_dir, std::shared_ptr<KmerImage> image);
+    KmerGuts(const std::string &kmer_dir, long long num_buckets);
+    KmerGuts(KmerGuts &);
+    ~KmerGuts(); 
+    void do_init();
 
-    unsigned char to_amino_acid_off(char c);
+    static unsigned char to_amino_acid_off(char c);
     char comp(char c);
     void rev_comp(const char *data,char *cdata);
-    unsigned long long encoded_kmer(unsigned char *p);
-    unsigned long long encoded_aa_kmer(char *p);
-    void decoded_kmer(unsigned long long encodedK,char *decoded);
+    static unsigned long long encoded_kmer(unsigned char *p);
+    static unsigned long long encoded_aa_kmer(const char *p);
+    static void decoded_kmer(unsigned long long encodedK,char *decoded);
     int dna_char(char c);
     void translate(const char *seq,int off,char *pseq, unsigned char *pIseq);
-    char **load_indexed_ar(char *filename,int *sz);
-    char **load_functions(char *file);
-    char **load_otus(char *file);
+    char **load_indexed_ar(const char *filename,int *sz);
+    char **load_functions(const char *file, int *sz);
+    char **load_otus(const char *file, int *sz);
     long long find_empty_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK);
     long long lookup_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK);
     kmer_memory_image_t *load_raw_kmers(char *file,unsigned long long num_entries, unsigned long long *alloc_sz);
@@ -311,7 +333,7 @@ public:
 
     void process_set_of_hits(std::shared_ptr<std::vector<KmerCall>> calls,
 				       std::shared_ptr<KmerOtuStats> otu_stats);
-    void gather_hits(int ln_DNA, char strand,int prot_off,const char *pseq,
+    void gather_hits(const char *pseq,
 		     unsigned char *pIseq,
 		     std::shared_ptr<std::vector<KmerCall>> calls,
 		     std::function<void(hit_in_sequence_t)> hit_cb,
@@ -333,16 +355,27 @@ public:
 			std::shared_ptr<KmerOtuStats> otu_stats);
 
     kmer_handle_t *init_kmers(const char *dataD);
-    static kmer_memory_image_t *map_image_file(const std::string &data_dir, size_t &image_size);
 
     std::shared_ptr<KmerImage> image_;
 
-    char *function_at_index(int i) { return kmersH->function_array[i]; }
+    const char *function_at_index(int i) {
+	if (i < 0 || i >= kmersH->function_count)
+	    return "INVALID_OFFSET";
+	else
+	    return kmersH->function_array[i];
+    }
 
     std::string format_call(const KmerCall &c);
     std::string format_hit(const hit_in_sequence_t &h);
-    std::string format_otu_stats(const std::string &id, int size, KmerOtuStats &otu_stats);
+    std::string format_otu_stats(const std::string &id, size_t size, KmerOtuStats &otu_stats);
+
+    void find_best_call(std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score, float &weighted_score, float &score_offset);
 };
 
+inline std::ostream &operator<<(std::ostream &os, const KmerCall &c)
+{
+    os << "KmerCall(" << c.start << "-" << c.end << ": " << c.count << ", " << c.function_index << ", " << c.weighted_hits << ")";
+    return os;
+}
 
 #endif /* _kmer_guts_h */

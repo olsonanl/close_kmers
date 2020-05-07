@@ -1,11 +1,11 @@
-#ifndef _fasta_parser_h
-#define _fasta_parser_h
+#ifndef _fastq_parser_h
+#define _fastq_parser_h
 
 #include <sstream>
 #include <iostream>
 #include <functional>
 
-class FastaParser
+class FastqParser
 {
 public:
 
@@ -14,10 +14,12 @@ public:
 	s_id,
 	s_defline,
 	s_data,
-	s_id_or_data,
+	s_plus_start,
+	s_plus_line,
+	s_qual
     };
 
-    FastaParser();
+    FastqParser();
 
     void set_callback(std::function<int(const std::string &id, const std::string &seq)> on_seq) {
 	on_seq_ = on_seq;
@@ -44,16 +46,17 @@ public:
 	*/
 	if (c == '\n')
 	    line_number++;
-	if (c == '\r')
-	    return true;
-	
 	std::string err;
 	switch (cur_state_)
 	{
 	case s_start:
-	    if (c != '>')
+	    if (c == '>')
 	    {
-		err = "Missing >";
+		err = "Starts with >. Is this a fasta file not a fastq file?";
+	    }
+	    else if (c != '@')
+	    {
+		err = "Missing @";
 	    }
 	    else
 	    {
@@ -91,10 +94,10 @@ public:
 	case s_data:
 	    if (c == '\n')
 	    {
-		cur_state_ = s_id_or_data;
+		cur_state_ = s_plus_start;
 
 	    }
-	    else if (isalpha(c) || c == '*')
+	    else if (isalpha(c))
 	    {
 		cur_seq_.push_back(c);
 	    }
@@ -106,31 +109,35 @@ public:
 	    }
 	    break;
 
-	case s_id_or_data:
-	    if (c == '>')
+	case s_plus_start:
+	    if (c != '+')
+	    {
+		err = "Missing +";
+	    }
+	    else
+	    {
+		cur_state_ = s_plus_line;
+	    }
+	    break;
+	    
+	case s_plus_line:
+	    if (c == '\n')
+	    {
+		cur_state_ = s_qual;
+	    }
+	    break;
+
+	case s_qual:
+	    if (c == '\n')
 	    {
 		call_callback();
 		cur_id_ = "";
 		cur_def_ = "";
 		cur_seq_ = "";
-		cur_state_ = s_id;
-	    }
-	    else if (c == '\n')
-	    {
-		cur_state_ = s_id_or_data;
-	    }
-	    else if (isalpha(c))
-	    {
-		cur_seq_.push_back(c);
-		cur_state_ = s_data;
-	    }
-	    else
-	    {
-		err = "Bad id or data character '";
-		err += c;
-		err += "'";
+		cur_state_ = s_start;
 	    }
 	    break;
+
 	}
 	if (!err.empty())
 	{

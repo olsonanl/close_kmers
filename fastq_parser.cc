@@ -1,12 +1,12 @@
-#include "fasta_parser.h"
+#include "fastq_parser.h"
 #include <cctype>
 
-FastaParser::FastaParser() : line_number(1)
+FastqParser::FastqParser() : line_number(1)
 {
     init_parse();
 }
 
-void FastaParser::init_parse()
+void FastqParser::init_parse()
 {
     cur_state_ = s_start;
     cur_id_ = "";
@@ -14,7 +14,7 @@ void FastaParser::init_parse()
     cur_seq_ = "";
 }
 
-void FastaParser::parse(std::istream &stream)
+void FastqParser::parse(std::istream &stream)
 {
     char c;
     init_parse();
@@ -27,7 +27,7 @@ void FastaParser::parse(std::istream &stream)
     parse_complete();
 }
 
-void FastaParser::parse_complete()
+void FastqParser::parse_complete()
 {
     call_callback();
     cur_id_ = "";

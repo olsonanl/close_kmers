@@ -125,11 +125,11 @@ int main(int argc, char **argv)
     std::string output_file;
     std::string sus_file;
     std::string res_file;
-    int rounds;
-    int max_files;
-    bool use_kmer_counts;
-    bool run_adaboost;
-    bool no_header;
+    int rounds = 0;
+    int max_files = 0;
+    bool use_kmer_counts = false;
+    bool run_adaboost = false;
+    bool no_header = false;
     x << "Usage: " << argv[0] << " [options] resistant-file susceptible-file\nAllowed options";
     po::options_description desc(x.str());
     desc.add_options()
@@ -211,7 +211,7 @@ int main(int argc, char **argv)
 
 	if (vm.count("output-file"))
 	{
-	    out = new ofstream(output_file);
+	    out = new std::ofstream(output_file);
 	}
 	else
 	{
@@ -261,7 +261,7 @@ int main(int argc, char **argv)
 
 	    if (vm.count("output-file"))
 	    {
-		out = new ofstream(output_file);
+		out = new std::ofstream(output_file);
 	    }
 	    else
 	    {
@@ -557,7 +557,7 @@ std::vector<double> Adaboost<KmerType>::update_prob_table(double alpha,
     double Wc = exp(-alpha);
     double Wi = exp(alpha);
 
-    double Z;
+    double Z = 0.0;
     std::vector<double> new_prob;
 
     auto kent = kvec.begin();

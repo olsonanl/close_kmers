@@ -11,13 +11,13 @@
 class MatrixRequest : public ComputeRequest
 {
 public:
-    MatrixRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, int content_length, bool chunked = false);
+    MatrixRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, size_t content_length, bool chunked = false);
     ~MatrixRequest() { std::cerr << "Destroy matrixrequest " << this << "\n"; }
     void run();
 
 private:
     std::shared_ptr<KmerPegMapping> mapping_;
-    int content_length_;
+    size_t content_length_;
     bool chunked_;
     std::shared_ptr<KmerRequest2> owner_;
     FastaParser parser_;

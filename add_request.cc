@@ -13,13 +13,14 @@ inline std::string make_string(boost::asio::streambuf& streambuf)
 	    buffers_end(streambuf.data())};
 }
 
-AddRequest::AddRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, int content_length, bool chunked) :
-    owner_(owner),
+AddRequest::AddRequest(std::shared_ptr<KmerRequest2> owner, std::shared_ptr<KmerPegMapping> mapping, size_t content_length, bool chunked) :
+    silent_(0),
     mapping_(mapping),
-    parser_(std::bind(&AddRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2)),
     content_length_(content_length),
-    chunked_(chunked), silent_(0)
+    chunked_(chunked), 
+    owner_(owner)
 {
+    parser_.set_callback(std::bind(&AddRequest::on_parsed_seq, this, std::placeholders::_1, std::placeholders::_2));
     silent_ = 0;
     try {
 	silent_ = std::stoi(owner_->parameters()["silent"]);
@@ -138,6 +139,27 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 				os << kguts->format_call(c);
 			    }
 			    os << kguts->format_otu_stats(id, seq.size(), *stats);
+
+			    int best_call_fi;
+			    float best_call_score, best_call_score_offset;
+			    std::string best_call_function;
+			    float best_call_weighted_score;
+			    kguts->find_best_call(*calls, best_call_fi, best_call_function,
+						  best_call_score, best_call_weighted_score, best_call_score_offset);
+			    std::string ambig_function;
+			    bool do_ambig_test = false;
+			    if (best_call_function.empty())
+				best_call_function = "hypothetical protein";
+			    else
+			    {
+				size_t where = best_call_function.find(" ?? ");
+				if (where != std::string::npos)
+				{
+				    best_call_function = "hypothetical protein";
+				}
+			    }
+			    os << "BEST-CALL\t" << id << "\t" << best_call_function << "\t" << best_call_score << "\t"
+			       << best_call_weighted_score << "\t" << best_call_score_offset << "\n";
 			}
 #ifdef USE_TBB
 			KmerPegMapping::encoded_id_t enc_id = m.encode_id(id);
@@ -218,4 +240,5 @@ int AddRequest::on_parsed_seq(const std::string &id, const std::string &seq)
     current_work_->push_back(std::make_pair(id, seq));
     // std::cerr << "seq: " << id << "\n";
     // std::cerr << seq << "\n";
+    return 0;
 }

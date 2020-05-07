@@ -19,6 +19,7 @@
 #include "matrix_request.h"
 #include "query_request.h"
 #include "lookup_request.h"
+#include "fq_process_request.h"
 #include "debug.h"
 
 const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(\\d+\\.\\d+)");
@@ -28,17 +29,19 @@ const boost::regex request_regex("^([A-Z]+) ([^?#]*)(\\?([^#]*))?(#(.*))? HTTP/(
  * $6 = fragment
  */
 const boost::regex mapping_path_regex("^/mapping/([^/]+)(/(add|matrix|lookup))$");
+const boost::regex genus_lookup_path_regex("^/genus_lookup/([^/]+)$");
 
 KmerRequest2::KmerRequest2(std::shared_ptr<KmerRequestServer> server,
 			   boost::asio::io_service &io_service,
 			   std::shared_ptr<std::map<std::string, std::shared_ptr<KmerPegMapping> > > mapping_map,
-			   std::shared_ptr<ThreadPool> thread_pool) : server_(server),
-								      io_service_(io_service),
-								      socket_(io_service_),
-								      mapping_map_(mapping_map),
-								      request_(65536),
-								      thread_pool_(thread_pool)
-							      
+			   std::shared_ptr<ThreadPool> thread_pool) :
+    server_(server),
+    io_service_(io_service),
+    socket_(io_service_),
+    request_(1048576),
+    mapping_map_(mapping_map),
+    thread_pool_(thread_pool)
+   
 {
     // std::cerr << "construct krequest2 " << this << "\n";
 }
@@ -269,12 +272,91 @@ void KmerRequest2::process_request()
 
     if (request_type_ == "GET")
     {
+	boost::smatch match;
 	if (path_ == "/quit")
 	{
 	    respond(200, "OK", "OK, quitting\n", [this](){
 		    std::cerr << "stopping io service\n";
 		    io_service_.stop();
 		});
+	}
+	else if (path_ == "/version")
+	{
+	    std::ostringstream os;
+
+	    if (g_parameters->count("kmer-version"))
+	    {
+		os << "kmer\t" << (*g_parameters)["kmer-version"].as<std::string>() << "\n";
+	    }
+	    if (g_parameters->count("families-version"))
+	    {
+		os << "families\t" << (*g_parameters)["families-version"].as<std::string>() << "\n";
+	    }
+	    os << "family-mode\t" << (server_->family_mode() ? "1" : "0") << "\n";
+	    respond(200, "OK", os.str(), [this](){});
+
+	}
+	else if (boost::regex_match(path_, match, genus_lookup_path_regex))
+	{
+	    std::string genus = match[1];
+
+	    auto xmap = mapping_map_->find("");
+	    if (xmap == mapping_map_->end())
+	    {
+		respond(404, "Not Found", "genus not found\n", [this](){});
+	    }
+	    else
+	    {
+		auto root_mapping = xmap->second;
+		auto hit = root_mapping->genus_map_.find(genus);
+		if (hit == root_mapping->genus_map_.end())
+		{
+		    respond(404, "Not Found", "genus not found\n", [this](){});
+		}
+		else
+		{
+		    respond(200, "OK", hit->second + "\n", [this](){});
+		}
+	    }
+	}
+	else if (path_ == "/dump_mapping")
+	{
+	    auto xmap = mapping_map_->find("");
+	    auto map = xmap->second;
+
+	    for (auto it: map->kmer_to_id_)
+	    {
+	        char kmer[10];
+		KmerGuts::decoded_kmer(it.first, kmer);
+		std::cout << kmer << "\t";
+		//os << it.first << "\t";
+		for (auto elt: it.second)
+		{
+		    std::cout << " " << map->decode_id(elt);
+		    //std::cout << " " << elt;
+		}
+		std::cout << "\n";
+	    }
+
+	    /* need to go back and fix; this is debugging code anyway
+	    for (auto it: map->family_mapping_)
+	    {
+		std::cout << it.first << "\t" << it.second.pgf << "\t" << it.second.plf << "\t" << it.second.function << "\n";
+	    }
+	    */
+	    respond(200, "OK", "Mapping dumped\n", [this](){ });
+	}
+	else if (path_ == "/dump_sizes")
+	{
+	    std::ostringstream os;
+	    os << "memory dump\n";
+	    for (auto mapping_it : *mapping_map_)
+	    {
+		os << "Mapping '" << mapping_it.first << "':\n";
+		mapping_it.second->dump_sizes(os);
+	    }
+	    respond(200, "OK", os.str(), [this](){ });
+	    
 	}
 #ifdef BLCR_SUPPORT
 	else if (path_ == "/checkpoint")
@@ -338,7 +420,7 @@ void KmerRequest2::process_request()
 	    return;
 	}
 
-	int len = std::stoi(x->second);
+	size_t len = std::stoul(x->second);
 
 	std::shared_ptr<KmerPegMapping> mapping;
 	std::string key("");
@@ -384,7 +466,13 @@ void KmerRequest2::process_request()
 	}   
 	else if (action == "/lookup")
 	{
-	    auto lookup_request = std::make_shared<LookupRequest>(shared_from_this(), mapping, len);
+	    auto lookup_request = std::make_shared<LookupRequest>(shared_from_this(), mapping, server_->family_mode(), len);
+	    lookup_request->run();
+	    active_request_ = lookup_request;
+	}   
+	else if (action == "/fq_lookup")
+	{
+	    auto lookup_request = std::make_shared<FqProcessRequest>(shared_from_this(), mapping, server_->family_mode(), len);
 	    lookup_request->run();
 	    active_request_ = lookup_request;
 	}   
@@ -414,8 +502,9 @@ void KmerRequest2::respond(int code, const std::string &status, const std::strin
     os << "Content-length: " << result.size() << "\n";
     os << "\n";
 
-    std::vector<boost::asio::const_buffer> bufs;
-    bufs.push_back(boost::asio::buffer(os.str()));
+    std::vector<boost::asio::const_buffer> bufs; 
+    std::string s(os.str());
+    bufs.push_back(boost::asio::buffer(s));
     bufs.push_back(boost::asio::buffer(result));
 
     //
