@@ -837,7 +837,7 @@ void KmerGuts::gather_hits(const char *pseq,
 
 	     if ((! order_constraint) || (num_hits == 0) ||
 		 ((fI == hits[num_hits-1].fI) &&
-		  (abs((pLoc - hits[num_hits-1].from0_in_prot) -
+		  (labs((pLoc - hits[num_hits-1].from0_in_prot) -
 		       (hits[num_hits-1].avg_off_from_end - avg_off_end)
 		      ) <= 20)))
 	     {
