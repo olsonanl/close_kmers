@@ -4,6 +4,7 @@
 #include <zlib.h>
 #include <cstdint>
 #include <boost/asio/streambuf.hpp>
+#include <functional>
 
 namespace zlib_support {
 
