@@ -1,7 +1,8 @@
 
 ifeq ($(wildcard /Library),) 
 
-BUILD_TOOLS = /disks/patric-common/runtime/gcc-4.9.4
+BUILD_TOOLS = /disks/patric-common/runtime/gcc-9.3.0
+#BUILD_TOOLS = /disks/patric-common/runtime/gcc-4.9.4
 PATH := $(BUILD_TOOLS)/bin:$(PATH)
 export PATH
 
