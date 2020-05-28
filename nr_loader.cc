@@ -1,6 +1,7 @@
 #include "nr_loader.h"
 
 #include <boost/filesystem.hpp>
+#include <fstream>
 
 #include "kmer.h"
 #include "threadpool.h"

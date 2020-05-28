@@ -35,7 +35,12 @@ void GzipDecoder::consume(boost::asio::streambuf &sb, std::function<void(std::sh
     auto beg = boost::asio::buffers_begin(bufs);
     auto end = boost::asio::buffers_end(bufs);
     size_t input_size = zstream_.avail_in = std::distance(beg, end);
+    #if BOOST_VERSION <= 105900
+    zstream_.next_in = const_cast<unsigned char *>(boost::asio::buffer_cast<const unsigned char*>(bufs));
+    #else
     zstream_.next_in = (unsigned char *) bufs.data();
+    #endif
+
     // std::cerr << "dist=" << zstream_.avail_in << std::endl;
 
     int ret = -1;
@@ -49,7 +54,13 @@ void GzipDecoder::consume(boost::asio::streambuf &sb, std::function<void(std::sh
 	 */
 	
 	boost::asio::streambuf::mutable_buffers_type obufs = output_buffer_->prepare(OutputSize);
+
+	#if BOOST_VERSION <= 105900
+	zstream_.next_out = boost::asio::buffer_cast<unsigned char*>(obufs);
+	#else
 	zstream_.next_out = (unsigned char *) obufs.data();
+	#endif
+
 	zstream_.avail_out = OutputSize;
 	
 	ret = inflate(&zstream_, Z_NO_FLUSH);
