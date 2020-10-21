@@ -101,7 +101,7 @@ int NRLoader::on_parsed_seq(const std::string &id, const std::string &seq)
     return 0;
 }
 
-void NRLoader::on_hit(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_id_t &enc_id, size_t seq_len)
+void NRLoader::on_hit(const KmerGuts::hit_in_sequence_t &hit, KmerPegMapping::encoded_id_t &enc_id, size_t seq_len)
 {
     if (family_mode_)
     {
@@ -113,7 +113,7 @@ void NRLoader::on_hit(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_i
     }
 }
 
-void NRLoader::on_hit_fam(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_family_id_t &enc_id,
+void NRLoader::on_hit_fam(const KmerGuts::hit_in_sequence_t &hit, KmerPegMapping::encoded_family_id_t &enc_id,
 			  size_t seq_len)
 {
     root_mapping_->add_fam_mapping(enc_id, hit.hit.which_kmer);
@@ -139,7 +139,7 @@ void NRLoader::thread_load(std::shared_ptr<seq_list_t> sent_work, int count)
 	    
 	    KmerPegMapping::encoded_id_t enc_id = root_mapping_->encode_id(id);
 
-	    std::function<void(KmerGuts::hit_in_sequence_t)> hit_cb;
+	    std::function<void(const KmerGuts::hit_in_sequence_t &)> hit_cb;
 
 	    std::vector<std::shared_ptr<KmerInserter::WorkElement>> insert_work_list;
 
@@ -157,7 +157,7 @@ void NRLoader::thread_load(std::shared_ptr<seq_list_t> sent_work, int count)
 		    return;
 		}
 		KmerPegMapping::encoded_family_id_t fam_id = fam_id_iter->second;
-		hit_cb = [this, insert_work_list, fam_id, enc_id](KmerGuts::hit_in_sequence_t hit)
+		hit_cb = [this, insert_work_list, fam_id, enc_id](const KmerGuts::hit_in_sequence_t &hit)
 		{
 		    int modulus = (int) (hit.hit.which_kmer % (unsigned long long) inserter_.n_workers());
 		    insert_work_list[modulus]->work.emplace_back(std::make_pair(hit.hit.which_kmer, fam_id));

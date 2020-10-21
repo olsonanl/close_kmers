@@ -127,7 +127,7 @@ int MatrixRequest::on_parsed_seq(const std::string &id, const std::string &seq)
     return 0;
 }
 
-void MatrixRequest::on_hit(KmerPegMapping::encoded_id_t id, KmerGuts::hit_in_sequence_t kmer)
+void MatrixRequest::on_hit(KmerPegMapping::encoded_id_t id, const KmerGuts::hit_in_sequence_t &kmer)
 {
     auto ki = mapping_->kmer_to_id_.find(kmer.hit.which_kmer);
     if (ki != mapping_->kmer_to_id_.end())

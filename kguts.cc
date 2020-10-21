@@ -1,6 +1,7 @@
 #include "kguts.h"
 
 #include <algorithm>
+#include <memory>
 #include <iostream>
 #include <sstream>
 #include <stdio.h>
@@ -74,7 +75,7 @@ void KmerGuts::do_init()
  * Alternative constructor used for loading hash table from
  * kmers and saving to disk.
  */
-KmerGuts::KmerGuts(const std::string &data_dir, long long num_buckets) :
+KmerGuts::KmerGuts(const std::string &data_dir, unsigned long long num_buckets) :
     size_hash(num_buckets),
     kmers_loaded_(0),
     image_(0)
@@ -95,7 +96,7 @@ KmerGuts::KmerGuts(const std::string &data_dir, long long num_buckets) :
     image->entry_size = sizeof(sig_kmer_t);
     image->version = (long long) KMER_VERSION;
 
-    kmer_handle_t *handle = new kmer_handle_t;
+    std::shared_ptr<kmer_handle_t> handle = std::make_shared<kmer_handle_t>();
     handle->kmer_table = (sig_kmer_t *) (image + 1);
     handle->num_sigs   = image->num_sigs;
 
@@ -103,7 +104,7 @@ KmerGuts::KmerGuts(const std::string &data_dir, long long num_buckets) :
 
     sig_kmer_t *sig_kmers = (sig_kmer_t *) (image + 1);
 
-    for (long long i =0; (i < size_hash); i++)
+    for (unsigned long long i =0; (i < size_hash); i++)
 	sig_kmers[i].which_kmer = MAX_ENCODED + 1;
 
     kmer_image_for_loading_ = image;
@@ -163,8 +164,8 @@ KmerGuts::KmerGuts(KmerGuts &k)
     do_init();
 }
 
-inline long long KmerGuts::find_empty_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK) {
-    long long hash_entry = encodedK % size_hash;
+inline unsigned long long KmerGuts::find_empty_hash_entry(sig_kmer_t sig_kmers[], unsigned long long encodedK) {
+    unsigned long long hash_entry = encodedK % size_hash;
     while (sig_kmers[hash_entry].which_kmer <= MAX_ENCODED)
       hash_entry = (hash_entry+1)%size_hash;
     return hash_entry;
@@ -181,18 +182,10 @@ KmerGuts::~KmerGuts() {
 	free(data);
     if (pseq)
 	free(pseq);
-
-    if (kmersH)
-    {
-	free(kmersH->function_array);
-	free(kmersH->otu_array);
-	delete kmersH;
-	kmersH = 0;
-    }
 }
 
 void KmerGuts::insert_kmer(const std::string &kmer,
-			   int function_index, int otu_index, unsigned short avg_offset,
+			   FunctionIndex function_index, OTUIndex otu_index, unsigned short avg_offset,
 			   float function_weight)
 {
     unsigned long long encodedK = encoder_.encoded_aa_kmer(kmer.c_str());
@@ -200,7 +193,7 @@ void KmerGuts::insert_kmer(const std::string &kmer,
 }
 
 void KmerGuts::insert_kmer(unsigned long long encodedK,
-			   int function_index, int otu_index, unsigned short avg_offset,
+			   FunctionIndex function_index, OTUIndex otu_index, unsigned short avg_offset,
 			   float function_weight)
 {
     if (encodedK > MAX_ENCODED)
@@ -208,7 +201,7 @@ void KmerGuts::insert_kmer(unsigned long long encodedK,
 	// std::cerr << "Warn: " << kmer << " contains invalid characters\n";
 	return;
     }
-    long long hash_entry = find_empty_hash_entry(sig_kmers_for_loading_, encodedK);
+    unsigned long long hash_entry = find_empty_hash_entry(sig_kmers_for_loading_, encodedK);
     kmers_loaded_++;
     if (kmers_loaded_ >= (size_hash / 2)) {
 	fprintf(stderr,"Your Kmer hash is half-full; use -s (and -w) to bump it\n");
@@ -512,11 +505,10 @@ int KmerGuts::dna_char(char c)
 
 void KmerGuts::translate(const char *seq,int off,char *pseq, unsigned char *pIseq) {
 
-    size_t i;
   size_t max = strlen(seq) - 3;
   char *p = pseq;
   unsigned char *pI = pIseq;
-  for (i=off; (i <= max); ) {
+  for (size_t i = (size_t) off; (i <= max); ) {
     int c1 = dna_char(seq[i++]);
     int c2 = dna_char(seq[i++]);
     int c3 = dna_char(seq[i++]);
@@ -582,8 +574,8 @@ char **KmerGuts::load_otus(const char *file, int *sz) {
   return load_indexed_ar(file,sz);
 }
 
-long long KmerGuts::lookup_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK) {
-    long long  hash_entry = encodedK % size_hash;
+unsigned long long KmerGuts::lookup_hash_entry(sig_kmer_t sig_kmers[],unsigned long long encodedK) {
+    unsigned long long  hash_entry = encodedK % size_hash;
     // std::cerr << "lookup " << hash_entry << " " << size_hash << "\n";
     while ((sig_kmers[hash_entry].which_kmer != encodedK) && (sig_kmers[hash_entry].which_kmer <= MAX_ENCODED)) {
       hash_entry = (hash_entry+1)%size_hash;
@@ -594,7 +586,7 @@ long long KmerGuts::lookup_hash_entry(sig_kmer_t sig_kmers[],unsigned long long 
 */
     }
     if (sig_kmers[hash_entry].which_kmer > MAX_ENCODED) {
-      return -1;
+      return ULLONG_MAX;
     }
     else {
       return hash_entry;
@@ -624,20 +616,19 @@ kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long long num_
     exit(1);
   }
 
-  long long i;
-  for (i=0; (i < size_hash); i++)
+  for (unsigned long long i = 0; (i < size_hash); i++)
     sig_kmers[i].which_kmer = MAX_ENCODED + 1;
 
   char kmer_string[KMER_SIZE+1];
   unsigned short end_off;
-  int fI;
+  FunctionIndex fI;
   float f_wt;
-  int oI;
-  long long loaded = 0;
-  while (fscanf(ifp,"%s\t%hu\t%d\t%f\t%d",
+  OTUIndex oI;
+  unsigned long long loaded = 0;
+  while (fscanf(ifp,"%s\t%hu\t%hu\t%f\t%hu",
 		kmer_string,&end_off,&fI,&f_wt,&oI) >= 4) {
     unsigned long long encodedK = encoded_aa_kmer(kmer_string);
-    long long hash_entry = find_empty_hash_entry(sig_kmers,encodedK);
+    unsigned long long hash_entry = find_empty_hash_entry(sig_kmers,encodedK);
     loaded++;
     if (loaded >= (size_hash / 2)) {
       fprintf(stderr,"Your Kmer hash is half-full; use -s (and -w) to bump it\n");
@@ -656,9 +647,9 @@ kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long long num_
   return image;
 }
 
-KmerGuts::kmer_handle_t *KmerGuts::init_kmers(const char *dataD)
+std::shared_ptr<KmerGuts::kmer_handle> KmerGuts::init_kmers(const char *dataD)
 {
-    kmer_handle_t *handle = new kmer_handle_t;
+    std::shared_ptr<KmerGuts::kmer_handle> handle = std::make_shared<KmerGuts::kmer_handle>();
     
     kmer_memory_image_t *image = image_->image();
     
@@ -740,14 +731,13 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
      int fI_count = 0;
      float weighted_hits = 0;
      int last_hit=0;
-     int i=0;
-     while (i < num_hits) {
+     for (int i = 0; i < num_hits; i++)
+     {
 	 if (hits[i].fI == current_fI) {
 	     last_hit = i;
 	     fI_count++;
 	     weighted_hits += hits[i].function_wt;
 	 }
-	 i++;
      }
      if ((fI_count >= min_hits) && (weighted_hits >= min_weighted_hits))
      {
@@ -759,7 +749,7 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
 
 	 if (otu_stats)
 	 {
-	     for (i=0; (i <= last_hit); i++)
+	     for (int i=0; (i <= last_hit); i++)
 	     {
 		 if (hits[i].fI == current_fI)
 		 {
@@ -783,7 +773,7 @@ void KmerGuts::advance_past_ambig(unsigned char **p,unsigned char *bound) {
 void KmerGuts::gather_hits(const char *pseq,
 			    unsigned char *pIseq,
 			    std::shared_ptr<std::vector<KmerCall>> calls,
-			    std::function<void(hit_in_sequence_t)> hit_cb,
+			    std::function<void(const hit_in_sequence_t &)> hit_cb,
 			    std::shared_ptr<KmerOtuStats> otu_stats)
  {
      unsigned char *p = pIseq;
@@ -796,7 +786,7 @@ void KmerGuts::gather_hits(const char *pseq,
 	 encodedK = encoded_kmer(p);
      }
      while (p < bound) {
-	 long long  where = lookup_hash_entry(kmersH->kmer_table,encodedK);
+	 unsigned long long  where = lookup_hash_entry(kmersH->kmer_table,encodedK);
 
 	 // pLoc is the offset of this kmer in the protein
 	 
@@ -805,11 +795,11 @@ void KmerGuts::gather_hits(const char *pseq,
 	 //for (int i = 0; i < KMER_SIZE; i++)
 	 //    std::cerr << prot_alpha[p[i]];
 	 //std::cerr << " " << encodedK << " " << where << "\n";
-	 if (where >= 0) {
+	 if (where != ULLONG_MAX) {
 	     sig_kmer_t *kmers_hash_entry = &(kmersH->kmer_table[where]);
 	     unsigned short avg_off_end = kmers_hash_entry->avg_from_end;
-	     unsigned int fI        = kmers_hash_entry->function_index;
-	     int oI          = kmers_hash_entry->otu_index;
+	     FunctionIndex fI        = kmers_hash_entry->function_index;
+	     OTUIndex oI          = kmers_hash_entry->otu_index;
 	     float f_wt      = kmers_hash_entry->function_wt;
 	     if (hit_cb != nullptr)
 		 hit_cb(hit_in_sequence_t(*kmers_hash_entry, pLoc));
@@ -818,7 +808,7 @@ void KmerGuts::gather_hits(const char *pseq,
 	      * If we are in a run of hits, and the gap between this hit and the start
 	      * of the is greater than our allowed gap, process the hits.
 	      */
-	     if ((num_hits > 0) && (hits[num_hits-1].from0_in_prot + max_gap) < pLoc)
+	     if ((num_hits > 0) && (hits[num_hits-1].from0_in_prot + (unsigned int) max_gap) < pLoc)
 	     {
 		 if (num_hits >= min_hits)
 		 {
@@ -881,13 +871,13 @@ void KmerGuts::gather_hits(const char *pseq,
 			       std::shared_ptr<std::vector<hit_in_sequence_t>> hits,
 			       std::shared_ptr<KmerOtuStats> otu_stats)
  {
-     auto cb = [this, hits](hit_in_sequence_t k) { hits->push_back(k); };
+     auto cb = [this, hits](const hit_in_sequence_t &k) { hits->push_back(k); };
      process_aa_seq(id, seq, calls, cb, otu_stats);
  }
 
  void KmerGuts::process_aa_seq(const std::string &idstr, const std::string &seqstr,
 			       std::shared_ptr<std::vector<KmerCall>> calls,
-			       std::function<void(hit_in_sequence_t)> hit_cb,
+			       std::function<void(const hit_in_sequence_t &)> hit_cb,
 			       std::shared_ptr<KmerOtuStats> otu_stats)
  {
      const char *id = idstr.c_str();
@@ -909,7 +899,7 @@ void KmerGuts::gather_hits(const char *pseq,
 
  void KmerGuts::process_seq(const char *id,const char *data,
 			    std::shared_ptr<std::vector<KmerCall>> calls,
-			    std::function<void(hit_in_sequence_t)> hit_cb,
+			    std::function<void(const hit_in_sequence_t &)> hit_cb,
 			    std::shared_ptr<KmerOtuStats> otu_stats)
 
  {
@@ -963,8 +953,9 @@ std::string KmerGuts::format_otu_stats(const std::string &id, size_t size, KmerO
     std::ostringstream oss;
     oss << "OTU-COUNTS\t" << id << "[" << size << "]";
 
-    auto end = std::next(otu_stats.otus_by_count.begin(), std::min(otu_stats.otus_by_count.size(), (size_t) 5));
-    for (auto x = otu_stats.otus_by_count.begin(); x != end; x++)
+    int max_to_print = 5;
+    for (auto x = otu_stats.otus_by_count.begin();
+	 x != otu_stats.otus_by_count.end() && max_to_print > 0; x++, max_to_print--)
     {
 	oss << "\t" << x->second << "-" << x->first;
     }
@@ -1005,9 +996,9 @@ struct FuncScore
  * This code replicates the amino acid version of the SEED pipeline
  * km_process_hits_to_regions | km_pick_best_hit_in_peg
  */
-void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index, std::string &function, float &score, float &weighted_score, float &score_offset)
+void KmerGuts::find_best_call(std::vector<KmerCall> &calls, FunctionIndex &function_index, std::string &function, float &score, float &weighted_score, float &score_offset)
 {
-    function_index = -1;
+    function_index = UndefinedFunction;
     function = "";
     score = 0.0;
     weighted_score = 0.0;
@@ -1124,7 +1115,7 @@ void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index,
     }
 
     //typedef map_t::value_type ent_t;
-    typedef std::pair<int, FuncScore> ent_t;
+    typedef std::pair<FunctionIndex, FuncScore> ent_t;
 
     std::vector<ent_t> vec;
     for (auto it = by_func.begin(); it != by_func.end(); it++)
@@ -1158,12 +1149,12 @@ void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index,
 	auto best = vec[0];
 	function_index = best.first;
 	function = function_at_index(function_index);
-	score = best.second.count;
+	score = (float) best.second.count;
 	weighted_score = best.second.weighted;
     }
     else
     {
-	function_index = -1;
+	function_index = UndefinedFunction;
 	function = "";
 	score = 0.0;
 
@@ -1181,7 +1172,7 @@ void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index,
 	    if (vec.size() == 2)
 	    {
 		function = f1 + " ?? " + f2;
-		score = vec[0].second.count;
+		score = (float) vec[0].second.count;
 	    }
 	    else if (vec.size() > 2)
 	    {
@@ -1189,7 +1180,7 @@ void KmerGuts::find_best_call(std::vector<KmerCall> &calls, int &function_index,
 		if (pair_offset > 5.0)
 		{
 		    function = f1 + " ?? " + f2;
-		    score = vec[0].second.count;
+		    score = (float) vec[0].second.count;
 		    score_offset = pair_offset;
 		    weighted_score = vec[0].second.weighted;
 		}

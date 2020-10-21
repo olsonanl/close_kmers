@@ -30,6 +30,7 @@
 
 #include <boost/regex.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/filesystem/fstream.hpp>
 #include <boost/program_options.hpp>
 #include <boost/thread/tss.hpp>
 #include <boost/thread/thread.hpp>
@@ -55,7 +56,10 @@ namespace fs = boost::filesystem;
 const int K = KMER_SIZE;
 const int MaxSequencesPerFile = 100000;
 
-typedef std::array<char, K> Kmer;
+// Kmer data type
+typedef std::array<unsigned char, K> Kmer;
+
+// Hash function on kmers
 namespace std {
 template<class T, size_t N>
 struct hash<std::array<T, N>> {
@@ -72,10 +76,10 @@ struct hash<std::array<T, N>> {
 
 struct KmerAttributes
 {
-    int func_index;
-    int otu_index;
-    int offset;
-    unsigned seq_id;
+    FunctionIndex func_index;
+    OTUIndex otu_index;
+    unsigned short offset;
+    unsigned int seq_id;
 };
 
 namespace tbb {
@@ -91,7 +95,7 @@ struct tbb_hash {
     size_t operator()(const Kmer& k) const {
         size_t h = 0;
 	for (auto s: k)
-	    h = (h*17)^s;
+	    h = (h * 17) ^ (unsigned int) s;
 	return h;
     }
 };
@@ -124,8 +128,8 @@ struct KmerStatistics
 {
     tbb::atomic<int> distinct_signatures = 0;
     tbb::concurrent_unordered_map<int, int> distinct_functions;
-    tbb::concurrent_unordered_map<int, int> seqs_with_func;
-    tbb::concurrent_unordered_set<int> seqs_with_a_signature;
+    tbb::concurrent_unordered_map<FunctionIndex, int> seqs_with_func;
+    tbb::concurrent_unordered_set<unsigned int> seqs_with_a_signature;
 };
 
 //
@@ -135,6 +139,7 @@ struct KmerStatistics
 
 KmerStatistics kmer_stats;
 
+tbb::mutex io_mutex;
 std::ofstream rejected_stream;
 std::ofstream kept_stream;
 std::ofstream kept_function_stream;
@@ -146,13 +151,21 @@ std::ofstream kept_function_stream;
 struct KeptKmer
 {
     Kmer kmer;
-    int median_offset;		// Median offset from the end of the protein
-    int function_index;
-    int otu_index;
-    int seqs_containing_sig;	// Count of sequences containing this kmer
-    int seqs_containing_function; // Count of sequences with the kmer that have the function
+    unsigned short median_offset;		// Median offset from the end of the protein
+    FunctionIndex function_index;
+//    FunctionIndex function_index2;	// Secondary function in the case of ambiguity
+    OTUIndex  otu_index;
+    unsigned int seqs_containing_sig;	// Count of sequences containing this kmer
+    unsigned int seqs_containing_function; // Count of sequences with the kmer that have the function
     float weight;
 };
+
+inline std::ostream &operator<<(std::ostream &os, const KeptKmer &k)
+{
+    os << k.kmer << " " << k.function_index << " " <<  k.seqs_containing_sig << " " << k.seqs_containing_function;
+    return os;
+}
+
 
 tbb::concurrent_vector<KeptKmer> kept_kmers;
 
@@ -166,7 +179,7 @@ struct KmerSet
     }
     // ~KmerSet() { std::cerr << "destroy " << this << "\n"; }
     Kmer kmer;
-    std::map<int, int> func_count;
+    std::map<FunctionIndex, int> func_count;
     int count;
     std::vector<KmerAttributes> set;
 };
@@ -434,7 +447,7 @@ public:
 	for (auto entry: function_genome_map_)
 	{
 	    auto function = entry.first;
-	    int n_genomes = entry.second.size();
+	    int n_genomes = (int) entry.second.size();
 	    kept_function_stream << function << ": " << n_genomes << " genomes\n";
 	    bool ok = false;
 
@@ -474,14 +487,16 @@ public:
 	    if (ok)
 		kept.insert(function);
 	}
+	// Ensure we have an ID for hypothetical protein
+	kept.insert("hypothetical protein");
 
 	/*
 	 * Assign sequential function IDs.
 	 */
-	int next = 0;
+	unsigned short next = 0;
 	for (auto f: kept)
 	{
-	    int id = next++;
+	    unsigned short id = next++;
 	    function_index_map_[f] = id;
 	}
 	std::cout << "kept " << next << " functions\n";
@@ -508,10 +523,10 @@ public:
 	else
 	    return it->second;
     }
-    int lookup_index(const std::string &func) {
+    FunctionIndex lookup_index(const std::string &func) {
 	auto it = function_index_map_.find(func);
 	if (it == function_index_map_.end())
-	    return -1;
+	    return USHRT_MAX;
 	else
 	    return it->second;
     }
@@ -530,7 +545,7 @@ public:
 
     // Create a function-array for compatibility with kguts
     char **create_kg_function_array(int *size) {
-	int n = function_index_map_.size();
+	size_t n = function_index_map_.size();
 	char **ret = (char **) malloc(sizeof(char *) * n);
 	
 	for (auto ent: function_index_map_)
@@ -544,7 +559,7 @@ public:
 	}
 	//for (int i = 0; i < n;  i++)
 	//    std::cerr << i << ": '" << ret[i] << "'\n";
-	*size = n;
+	*size = (int) n;
 	return ret;
     }
 	
@@ -560,16 +575,16 @@ public:
 private:
     std::map<std::string, std::set<std::string> > function_genome_map_;
     std::map<std::string, std::string> id_function_map_;
-    std::map<std::string, int> function_index_map_;
+    std::map<std::string, FunctionIndex> function_index_map_;
 
     std::set<std::string> good_roles_;
     std::set<std::string> good_functions_;
 };
 
-std::set<char> ok_prot = { 'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y',
+std::set<unsigned char> ok_prot = { 'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y',
 			   'a', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'k', 'l', 'm', 'n', 'p', 'q', 'r', 's', 't', 'v', 'w', 'y'};
 
-void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned &next_sequence_id,
+void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned int &next_sequence_id,
 		   const std::string &id, const std::string &def, const std::string &seq)
 {
     if (id.empty())
@@ -595,18 +610,29 @@ void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned &next_sequence
 	return;
     }
     
-    unsigned seq_id = next_sequence_id++;
+    unsigned int seq_id = next_sequence_id++;
 
-    int function_index = fm.lookup_index(func);
+    FunctionIndex function_index = fm.lookup_index(func);
+
+    if (function_index == UndefinedFunction)
+    {
+	function_index = fm.lookup_index("hypothetical protein");
+	if (function_index == UndefinedFunction)
+	{
+	    std::cerr << "No function defined for hypothetical protein\n";
+	    exit(1);
+	}
+    }
+
     // std::cout << "Load seq " << id << " '" << func << "' " << function_index << " id=" << seq_id <<  "\n";
-    if (function_index < 0)
+    if (function_index == UndefinedFunction)
 	return;
 
     kmer_stats.seqs_with_func[function_index]++;
 
     for (auto it = seq.begin(); it < seq.end() - K + 1; it++)
     {
-        int n = std::distance(it, seq.end());
+        unsigned short n = (unsigned short) std::distance(it, seq.end());
 	Kmer kmer;
 	Kmer::iterator kiter = kmer.begin();
 	bool ok = true;
@@ -622,7 +648,7 @@ void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned &next_sequence
 	}
 	if (ok)
 	{
-	    m.insert({kmer, { function_index, -1, n, seq_id }});
+	    m.insert({kmer, { function_index, UndefinedOTU, n, seq_id }});
 	    // std::cout << kmer << " " << n << "\n";
 	}
 	else
@@ -660,34 +686,93 @@ void enqueue_set(KmerSetListPtr set_list)
     g_kmer_processor->enqueue_work(set_list);
 }
 
+//void process_set(Kmer &kmer, std::map<FunctionIndex, int> &func_count, int count, std::vector<KmerAttributes> &set)
+
 void process_set(KmerSet &set)
-//void process_set(Kmer &kmer, std::map<int, int> &func_count, int count, std::vector<KmerAttributes> &set)
 {
+    FunctionIndex best_func_1 = UndefinedFunction, best_func_2 = UndefinedFunction;
+    int best_count_1 = -1, best_count_2 = -1;
+    
+    /*
     auto elt = std::max_element(set.func_count.begin(), set.func_count.end(),
 				[](auto a, auto b) { return a.second < b.second; });
 
-    int best_func = elt->first;
+    FunctionIndex best_func = elt->first;
     int best_count = elt->second;
-
-    float thresh = float(set.count) * 0.8;
-
-    /*
-    kept_stream << "Process set for " << kmer << " best=" << best_func << " best_count=" << best_count << " count=" << count << " thresh=" << thresh << "\n";
-    for (auto x: set)
-    {
-	kept_stream << "  " << x.func_index << " " << x.seq_id << "\n";
-    }
     */
 
-    if ((float) best_count < thresh)
+    // we want the top two elements by value in the map; don't know how
+    // with standard STL without copying to a vector, but if we're copying
+    // anyway we can just search for them.
+    for (auto x: set.func_count)
     {
-	// std::cout << "discard for " << best_count << " < " << thresh << "\n";
-	// rejected_stream << kmer <<  " best_count=" << best_count << " thresh=" << thresh << "\n";
-	return;
+	if (best_func_1 == UndefinedFunction)
+	{
+	    best_func_1 = x.first;
+	    best_count_1 = x.second;
+	}
+	else if (x.second > best_count_1)
+	{
+	    best_func_2 = best_func_1;
+	    best_count_2 = best_count_1;
+
+	    best_func_1 = x.first;
+	    best_count_1 = x.second;
+	}
+	else if (x.second > best_count_2)
+	{
+	    best_func_2 = x.first;
+	    best_count_2 = x.second;
+	}
     }
 
-    int seqs_containing_func = 0;
-    std::vector<int> offsets;
+    float thresh = float(set.count) * 0.8f;
+    int best_count = best_count_1;
+    FunctionIndex best_func = best_func_1;
+
+    {
+	tbb::mutex::scoped_lock lock(io_mutex);
+
+	/*
+	kept_stream << "Process set for " << set.kmer << " best1=" << best_func_1 << " best_count_1=" << best_count_1
+		    << " best2=" << best_func_2 << " best_count_2=" << best_count_2 << " count=" << set.count << " thresh=" << thresh << "\n";
+	*/
+
+/*
+	for (auto x: set.func_count)
+	{
+	    kept_stream << x.first << " " << x.second << "\n";
+	}
+*/
+	   
+	/*
+	std::sort(set.set.begin(), set.set.end(), [&set](auto a, auto b) {
+		return set.func_count[b.func_index] < set.func_count[a.func_index];
+	    });
+
+	for (auto x: set.set)
+	{
+	    kept_stream << "  " << x.func_index << " " << x.seq_id << "\n";
+	}
+	*/
+	
+	if ((float) best_count < thresh)
+	{
+	    // std::cout << "discard for " << best_count << " < " << thresh << "\n";
+	    rejected_stream << set.kmer <<  " best_count=" << best_count << " thresh=" << thresh << "\n";
+	    if ((float) (best_count_1 + best_count_2) >= thresh)
+	    {
+		kept_stream << "AMBIG\t" << best_func_1 << "\t"
+			    << best_func_2 << "\t"
+			    << best_count_1 << "\t"
+			    << best_count_2 << "\n";
+	    }
+	    return;
+	}
+    }
+
+    unsigned int seqs_containing_func = 0;
+    std::vector<unsigned short> offsets;
 
     for (auto item: set.set)
     {
@@ -699,14 +784,14 @@ void process_set(KmerSet &set)
 	kmer_stats.seqs_with_a_signature.insert(item.seq_id);
     }
     std::sort(offsets.begin(), offsets.end());
-    int median_offset = offsets[offsets.size() / 2];
+    unsigned short median_offset = offsets[offsets.size() / 2];
     // std::cout << seqs_containing_func << " " << median_offset<< "\n";
 
     kmer_stats.distinct_signatures++;
     kmer_stats.distinct_functions[best_func]++;
 
-    kept_kmers.push_back(KeptKmer { set.kmer, median_offset, best_func, -1,
-				       (int) set.set.size(), seqs_containing_func });
+    kept_kmers.push_back(KeptKmer { set.kmer, median_offset, best_func, UndefinedOTU,
+		(unsigned int) set.set.size(), seqs_containing_func });
 }
 
 
@@ -789,6 +874,8 @@ void par_process_kmers(KmerAttributeMap &m)
 	});
 }
 
+#if 0
+// Not used apparently
 void process_kmer_block(KmerAttributeMap &m)
 {
     Kmer cur { 0 } ;
@@ -837,18 +924,19 @@ void process_kmer_block(KmerAttributeMap &m)
     enqueue_set(cur_set_list);
     std::cout << "done, pushed " << sets_pushed << " sets\n";
 }
+#endif
 
 void compute_weight_of_signature(KeptKmer &kk)
 {
-    float NSF = kmer_stats.seqs_with_a_signature.size();
-    float KS  = kmer_stats.distinct_signatures;
+    float NSF = (float) kmer_stats.seqs_with_a_signature.size();
+    float KS  = (float) kmer_stats.distinct_signatures;
     // float KF  = kmer_stats.seqs_with_func.size();
-    float NSi = kk.seqs_containing_sig;
-    float NFj = kmer_stats.seqs_with_func[kk.function_index];
-    float NSiFj = kk.seqs_containing_function;
+    float NSi = (float) kk.seqs_containing_sig;
+    float NFj = (float) kmer_stats.seqs_with_func[kk.function_index];
+    float NSiFj = (float) kk.seqs_containing_function;
 
-    kk.weight = log((NSiFj + 1.0) / (NSi - NSiFj + 1.0)) +
-	log((NSF - NFj + KS) / (NFj + KS));
+    kk.weight = std::log((NSiFj + 1.0f) / (NSi - NSiFj + 1.0f)) +
+	std::log((NSF - NFj + KS) / (NFj + KS));
 
 }
 
@@ -887,6 +975,7 @@ KmerGuts *write_hashtable(const fs::path &dir, tbb::concurrent_vector<KeptKmer> 
 
     for (auto k: kmers)
     {
+	// std::cout << k << "\n";
 	kguts->insert_kmer(kguts->encoder_.encoded_aa_kmer(k.kmer),
 			  k.function_index, k.otu_index, k.median_offset, k.weight);
     }
@@ -929,7 +1018,7 @@ std::experimental::optional<RecallData> recall_sequence(FunctionMap &fm, KmerGut
     }
     */
 	    
-    int best_fi;
+    FunctionIndex best_fi;
     RecallData ret;
     kguts->find_best_call(calls, best_fi, ret.new_function, ret.score, ret.weighted_score, ret.score_offset);
 
@@ -1328,21 +1417,21 @@ int main(int argc, char *argv[])
 
     if (n_threads < 0)
     {
-	for (size_t i = 0; i < all_fasta_data.size(); i++)
+	for (unsigned i = 0; i < (unsigned) all_fasta_data.size(); i++)
 	{
 	    load_fasta(fm, m, i, all_fasta_data[i]);
 	}
     }
     else
     {
-	int n = all_fasta_data.size();
+	size_t n = all_fasta_data.size();
 	tbb::parallel_for(tbb::blocked_range<size_t>(0, n),
 			  [&fm, &m, &next_sequence_id, &all_fasta_data](const tbb::blocked_range<size_t> &r) {
 			      for (size_t i = r.begin(); i != r.end(); ++i)
 			      {
 				  auto fasta = all_fasta_data[i];
 				  std::cout << "load file " << i << " " << fasta << "\n";
-				  load_fasta(fm, m, i, fasta);
+				  load_fasta(fm, m, (unsigned) i, fasta);
 			      }
 			  });
     }
@@ -1389,7 +1478,7 @@ int main(int argc, char *argv[])
 	kguts->max_gap = recall_max_gap;
 
 	KmerGuts *shared_kguts = kguts;
-	int n = all_fasta_data.size();
+	size_t n = all_fasta_data.size();
 
 	if (n_threads >= 1)
 	{
@@ -1493,9 +1582,6 @@ int main(int argc, char *argv[])
     std::cerr << "all done\n";
 
     free(kguts->kmer_image_for_loading_);
-    free(kguts->kmersH->function_array);
-    free(kguts->kmersH->otu_array);
-    delete kguts->kmersH;
     delete kguts;
 
     show_ps();

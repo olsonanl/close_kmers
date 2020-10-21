@@ -123,7 +123,7 @@ void QueryRequest::on_data(boost::system::error_code err, size_t bytes)
 
 		    if (find_best_call)
 		    {
-			int best_call_fi;
+			FunctionIndex best_call_fi;
 			float best_call_score, best_call_weighted_score, best_call_score_offset;
 			std::string best_call_function;
 			kguts->find_best_call(*calls, best_call_fi, best_call_function, best_call_score,

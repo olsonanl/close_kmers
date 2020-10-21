@@ -76,7 +76,7 @@ int main(int argc, char* argv[])
 
     parser.set_callback([&kguts, &kmap](const std::string &id, const std::string &seq) {
 	    klist_t klist;
-	    auto cb = [&kguts, &klist, id, seq](KmerGuts::hit_in_sequence_t hit) {
+	    auto cb = [&kguts, &klist, id, seq](const KmerGuts::hit_in_sequence_t &hit) {
 		klist.insert(hit.hit.which_kmer);
 		// klist.push_back(hit.hit.which_kmer);
 	    };

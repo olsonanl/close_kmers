@@ -57,7 +57,7 @@ kmer_memory_image_t *KmerImage::map_image_file(const std::string &data_dir, size
 	fprintf(stderr, "stat %s failed: %s\n", fileM.c_str(), strerror(errno));
 	exit(1);
     }
-    unsigned long long file_size = sbuf.st_size;
+    unsigned long long file_size = (unsigned long long) sbuf.st_size;
     size = file_size;
     
     /* 

@@ -170,6 +170,9 @@ x.o: x.cc kguts.h
 x: x.o kmer_encoder.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
+x1: x1.o kmer_encoder.o
+	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
+
 tr: tr.o
 	$(CXX) $(LDFLAGS) $(OPT) -o $@ $^ $(LIBS)
 
@@ -330,5 +333,6 @@ unique_prots.o: global.h kguts.h kmer_image.h kmer_types.h kmer_params.h
 unique_prots.o: kmer_encoder.h fasta_parser.h
 validate_fasta.o: fasta_parser.h
 validate_fastq.o: fastq_parser.h trans_table.h dna_seq.h
-x.o: kmer_encoder.h kmer_params.h kmer_types.h prot_seq.h
+x1.o: kmer_encoder.h kmer_params.h kmer_types.h tabsep.h prot_seq.h
+x.o: kguts.h kmer_image.h kmer_types.h kmer_params.h kmer_encoder.h
 zlib_support.o: zlib_support.h

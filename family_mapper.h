@@ -53,7 +53,7 @@ private:
 
     std::unordered_map<KmerPegMapping::encoded_id_t, sequence_accumulated_score_t> seq_score_;
 
-    void on_hit(KmerGuts::hit_in_sequence_t kmer);
+    void on_hit(const KmerGuts::hit_in_sequence_t &kmer);
 
     bool find_best_match_;
     bool family_mode_;

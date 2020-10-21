@@ -202,7 +202,7 @@ void LookupRequest::on_data(boost::system::error_code err, size_t bytes)
 
 			if (find_best_match_ && family_mode_)
 			{
-			    int best_call_fi;
+			    FunctionIndex best_call_fi;
 			    float best_call_score, best_call_score_offset;
 			    std::string best_call_function;
 			    float best_call_weighted_score;
@@ -443,7 +443,7 @@ int LookupRequest::on_parsed_seq(const std::string &id, const std::string &seq)
     return 0;
 }
 
-void LookupRequest::on_hit(KmerGuts::hit_in_sequence_t kmer)
+void LookupRequest::on_hit(const KmerGuts::hit_in_sequence_t &kmer)
 {
     if (family_mode_)
     {

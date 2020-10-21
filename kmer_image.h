@@ -2,6 +2,7 @@
 #define _kmer_image_h
 
 #include <string>
+#include "kmer_types.h"
 
 #define KMER_VERSION 1
 
@@ -14,13 +15,6 @@ typedef struct kmer_memory_image {
     long long  version;
 } kmer_memory_image_t;
 
-typedef struct sig_kmer {
-    unsigned long long  which_kmer;
-    int  otu_index;
-    unsigned short  avg_from_end;
-    int  function_index;
-    float function_wt;
-} sig_kmer_t;
 
 class KmerImage
 {

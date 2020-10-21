@@ -140,7 +140,7 @@ void AddRequest::on_data(boost::system::error_code err, size_t bytes)
 			    }
 			    os << kguts->format_otu_stats(id, seq.size(), *stats);
 
-			    int best_call_fi;
+			    FunctionIndex best_call_fi;
 			    float best_call_score, best_call_score_offset;
 			    std::string best_call_function;
 			    float best_call_weighted_score;

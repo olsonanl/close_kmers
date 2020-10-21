@@ -82,8 +82,8 @@ public:
     tbb::atomic<int> chunks_finished_;
     int on_parsed_seq(const std::string &id, const std::string &seq);
     void thread_load(std::shared_ptr<seq_list_t> sent_work, int count);
-    void on_hit(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_id_t &enc_id, size_t seq_len);
-    void on_hit_fam(KmerGuts::hit_in_sequence_t hit, KmerPegMapping::encoded_family_id_t &enc_id, size_t seq_len);
+    void on_hit(const KmerGuts::hit_in_sequence_t &hit, KmerPegMapping::encoded_id_t &enc_id, size_t seq_len);
+    void on_hit_fam(const KmerGuts::hit_in_sequence_t &hit, KmerPegMapping::encoded_family_id_t &enc_id, size_t seq_len);
 
 };
 

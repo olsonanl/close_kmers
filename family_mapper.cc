@@ -64,7 +64,7 @@ void FamilyMapper::ingest_protein(const std::string &id, const std::string &seq)
 
 FamilyMapper::best_match_t FamilyMapper::find_best_family_match(const std::string &id, const std::string &seq)
 {
-    int best_call_fi;
+    FunctionIndex best_call_fi;
     float best_call_score, best_weighted_score, best_score_offset;
     std::string best_call_function;
 
@@ -284,7 +284,7 @@ void FamilyMapper::find_all_matches(std::ostream &os, const std::string &id, con
     os << "//\n";
 }
 
-void FamilyMapper::on_hit(KmerGuts::hit_in_sequence_t kmer)
+void FamilyMapper::on_hit(const KmerGuts::hit_in_sequence_t &kmer)
 {
     if (family_mode_)
     {
