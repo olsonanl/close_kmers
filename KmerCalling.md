@@ -48,6 +48,31 @@ id-83333.1.peg.4	Threonine synthase (EC 4.2.3.1)		412	      1232.38
 
 Here, the fields are sequence id, best call, score, weighted score.
 
+If you wish to see a per-kmer detail, use the endpoint `http://pear:6100/query?details=1`:
+
+```
+$ curl --data-binary @query.fa "http://pear:6100/query?details=1"
+PROTEIN-ID	     id-83333.1.peg.1	21
+CALL		     0			19	13	30895	Thr operon leader peptide	22.729
+HIT		     0			MKRISTTI	21	Thr operon leader peptide	2.0849	251
+HIT		     1			KRISTTIT	20	Thr operon leader peptide	1.3918	504
+HIT		     2			RISTTITT	19	Thr operon leader peptide	2.2027	460
+HIT		     3			ISTTITTT	18	Thr operon leader peptide	1.1041	475
+HIT		     4			STTITTTI	17	Thr operon leader peptide	1.5096	710
+HIT		     5			TTITTTIT	16	Thr operon leader peptide	1.2095	611
+HIT		     6			TITTTITI	15	Thr operon leader peptide	1.5096	878
+HIT		     7			ITTTITIT	14	Thr operon leader peptide	2.2027	564
+HIT		     8			TTTITITT	13	Thr operon leader peptide	1.3918	517
+HIT		     9			TTITITTG	12	Thr operon leader peptide	2.4904	684
+HIT		     10			TITITTGN	11	Thr operon leader peptide	1.8773	872
+HIT		     11			ITITTGNG	10	Thr operon leader peptide	1.8773	200
+HIT		     12			TITTGNGA	9	Thr operon leader peptide	1.8773	91
+OTU-COUNTS	     id-83333.1.peg.1[21]		1-91	1-200	   1-251  1-460		1-475
+```
+
+The fields on the new output line HIT are kmer offset, kmer text, average distance from end for this kmer, 
+function for kmer, weight for this kmer, OTU index for this kmer.
+
 ## `kmer_search` command line tool
 
 In order to access arbitrary kmer builds, or to process DNA input, the command line tool `kmer_search` found 
@@ -55,3 +80,68 @@ in the SEED codebase can be used. This tool requires a kmer data directory to be
 in RAST and BV-BRC (and in the web service described above) is available in `/vol/core-seed/kmers/core.2018-0531/Data.2`. A newer
 version built this month (April, 2022) is available in `/vol/core-seed/kmers/core.2022-0406/Data.2`.
 
+The data directory is specified with the `d` flag.
+
+### Processing proteins
+
+For processing protein sequences, use the `-a` flag. For example:
+
+```
+$ kmer_search -d /vol/core-seed/kmers/core.2022-0406/Data.2 -a < query.fa
+Set size_hash=2147483648 from file size 51539607576
+id-83333.1.peg.1	 Thr operon leader peptide	12	21.3377	
+id-83333.1.peg.2	 Aspartokinase (EC 2.7.2.4) / Homoserine dehydrogenase (EC 1.1.1.3)	791	2428.655029	
+id-83333.1.peg.3	 Homoserine kinase (EC 2.7.1.39)	 293	       804.906616	
+id-83333.1.peg.4	 Threonine synthase (EC 4.2.3.1)	 412	       1231.588257
+```
+
+Here, the fields are sequence id, best call, score, weighted score.
+
+If you wish to see the per-kmer details, add the `--debug` flag:
+
+```
+$ kmer_search -d /vol/core-seed/kmers/core.2022-0406/Data.2 -a --debug < query.fa
+Set size_hash=2147483648 from file size 51539607576
+PROTEIN-ID		 id-83333.1.peg.1	21
+HIT			 MKRISTTI		0	Thr operon leader peptide
+HIT			 KRISTTIT		1	Thr operon leader peptide
+HIT			 RISTTITT		2	Thr operon leader peptide
+HIT			 ISTTITTT		3	Thr operon leader peptide
+HIT			 STTITTTI		4	Thr operon leader peptide
+HIT			 TTITTTIT		5	Thr operon leader peptide
+HIT			 TITTTITI		6	Thr operon leader peptide
+HIT			 ITTTITIT		7	Thr operon leader peptide
+HIT			 TTITITTG		9	Thr operon leader peptide
+HIT			 TITITTGN		10	Thr operon leader peptide
+HIT			 ITITTGNG		11	Thr operon leader peptide
+HIT			 TITTGNGA		12	Thr operon leader peptide
+CALL			 0			19	12  28503  Thr operon leader peptide	21.337700
+OTU-COUNTS		 id-83333.1.peg.1[21]	1-92	1-207	   1-903      1-712  1-589
+```
+
+This exposes the underlying individual hits as well as the PROTEIN-ID and CALL information as specified above.
+
+### Processing DNA
+
+To process DNA sequences, do not specify the `-a` flag:
+
+```
+$ kmer_search -d /vol/core-seed/kmers/core.2022-0406/Data.2 < dnak.fa 
+Set size_hash=2147483648 from file size 51539607576
+fig|32049.15.peg.667
+	4	Dactylococcopsis salina
+	2	Ruminococcus obeum
+	2	Rickettsia rickettsii
+	2	Arthrospira platensis
+	1	Verrucomicrobium spinosum
+
+---------------------
+fig|32049.15.peg.667	41	1070	-	2	6	hypothetical protein	4.176600	37855
+fig|32049.15.peg.667	115	580	+	0	27	DnaK-like chaperone protein slr0086	52.502995	8562
+fig|32049.15.peg.667	170	1367	+	1	11	hypothetical protein	    8.062501	37855
+fig|32049.15.peg.667	667	1462	+	0	42	DnaK-like chaperone protein slr0086	55.559204	8562
+fig|32049.15.peg.667	1528	1582	+	0	5	hypothetical protein	    3.480500	37855
+```
+
+We first have a summary of the number of OTU hits for each of the top OTUs. This is followed by the DNA hits. Fields 
+generated are seuqence id, begin, end, strand, frame, number of hits, function, weighted score, function index.
