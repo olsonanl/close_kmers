@@ -3,6 +3,8 @@
 In SEED we have two primary mechanisms for propagating function from the signature
 kmer databases to input sequences.
 
+== Kmer calling web service
+
 For production use for processing protein sequences (and for making PATtyfam assignments) we
 have a web service available inside on the SEED systems within the ANL firewall. The endpoint for 
 the kmer function calling is `http://pear:6100/query`. The protein sequence is passed as the input 
@@ -24,3 +26,13 @@ PROTEIN-ID	     id-83333.1.peg.4		428
 CALL		     0				426	412	30907	Threonine synthase (EC 4.2.3.1)	1232.38
 OTU-COUNTS	     id-83333.1.peg.4[428]	8-310	5-438	5-623	4-3	  4-12
 ```
+
+The fields in the output are as follows.
+
+ * PROTEIN-ID: identifier (from fasta file), sequence length
+
+ * CALL: start of called region (in the protein sequence), end of called region, count of kmer hits
+
+ * OTU-COUNTS: sequence id, sequence length (in brackets), and a list of otu signatures of the format OTU-Count
+
+== `kmer_search` command line tool
