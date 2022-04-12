@@ -80,7 +80,7 @@ in the SEED codebase can be used. This tool requires a kmer data directory to be
 in RAST and BV-BRC (and in the web service described above) is available in `/vol/core-seed/kmers/core.2018-0531/Data.2`. A newer
 version built this month (April, 2022) is available in `/vol/core-seed/kmers/core.2022-0406/Data.2`.
 
-The data directory is specified with the `d` flag.
+The data directory is specified with the `-d` flag.
 
 ### Processing proteins
 
