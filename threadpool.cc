@@ -34,7 +34,9 @@ void ThreadPool::start(int n_threads)
 		std::cerr << "thread " << thread_id << " created " << kg << std::endl;
 
 		kguts_.reset(kg);
-		thread_index_.reset(new int(thread_id));
+		int *ti = new int;
+		*ti = thread_id;
+		thread_index_.reset(ti);
 		io_service_.run();
 		KmerGuts *x = kguts_.release();
 		std::cerr << "thread " << thread_id << " finished " << x << std::endl;
@@ -58,7 +60,9 @@ void ThreadPool::add_threads(int n_threads)
 		KmerGuts *kg = new KmerGuts(kmer_dir_, image_);
 		std::cerr << "extra thread " << thread_id << " created " << kg << std::endl;
 		kguts_.reset(kg);
-		thread_index_.reset(new int(thread_id));
+		int *ti = new int;
+		*ti = thread_id;
+		thread_index_.reset(ti);
 		io_service_.run();
 		std::cerr << "extra thread " << thread_id << " finished " << std::endl;
 		KmerGuts *x = kguts_.release();

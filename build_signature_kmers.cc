@@ -34,7 +34,13 @@
 #include <boost/program_options.hpp>
 #include <boost/thread/tss.hpp>
 #include <boost/thread/thread.hpp>
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/mean.hpp>
+#include <boost/accumulators/statistics/median.hpp>
+#include <boost/accumulators/statistics/variance.hpp>
 
+#include "nudb_kmer_db.h"
 #include "seed_utils.h"
 #include "operators.h"
 #include "fasta_parser.h"
@@ -45,6 +51,8 @@
 #include "tbb/compat/thread"
 #include "tbb/concurrent_hash_map.h"
 
+#include "welford.h"
+
 using namespace seed_utils;
 
 #define DEFINE_GLOBALS
@@ -52,12 +60,15 @@ using namespace seed_utils;
 
 namespace po = boost::program_options;
 namespace fs = boost::filesystem;
+namespace acc = boost::accumulators;
+
+#include "function_map.h"
 
 const int K = KMER_SIZE;
 const int MaxSequencesPerFile = 100000;
 
 // Kmer data type
-typedef std::array<unsigned char, K> Kmer;
+typedef std::array<char, K> Kmer;
 
 // Hash function on kmers
 namespace std {
@@ -80,6 +91,7 @@ struct KmerAttributes
     OTUIndex otu_index;
     unsigned short offset;
     unsigned int seq_id;
+    unsigned int protein_length;
 };
 
 namespace tbb {
@@ -158,6 +170,9 @@ struct KeptKmer
     unsigned int seqs_containing_sig;	// Count of sequences containing this kmer
     unsigned int seqs_containing_function; // Count of sequences with the kmer that have the function
     float weight;
+    unsigned short mean;
+    unsigned short median;
+    unsigned short var;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const KeptKmer &k)
@@ -248,339 +263,6 @@ struct KmerProcessor
 };
 KmerProcessor *g_kmer_processor;
 
-/*
- * Manage the ID to function mapping.
- *
- * FunctionMap also maintains the database of function => genome mappings
- * that is used to determine whether a given function has enough evidence
- * available to be used to create signature kmers.
- *
- * Functions occurring in genomes are determined by the presence of a
- * protein with the given function occurring in the fasta file for
- * a genome.
- *
- * The genome for a fasta file is determined using either the identifier
- * from the first sequence in the file (if it is a fig| identifier), or
- * the genome name in square brackets at the end of the definition line
- * in the case of fasta files loaded in standard genbank format from
- * outside the SEED environment.
- *
- * Members include:
- *
- *  function_genome_map_: maps from function string to the list of genomes in which it occurs.
- 			  Initialized from scanning the protein fasta files.
- *
- *  id_function_map_: maps from protein ID to assigned function.
- *		      Initialized from the function def files, overriden by fasta files
- * 		
- */
-class FunctionMap
-{
-public:
-    FunctionMap() {
-    }
-
-    void load_id_assignments(const fs::path &file) {
-	fs::ifstream ifstr(file);
-	std::string line;
-	int lineno = 0;
-	while (std::getline(ifstr, line))
-	{
-	    lineno++;
-	    size_t s = line.find('\t');
-	    if (s == std::string::npos)
-	    {
-		std::cerr << "bad line " << lineno << " in file " << file << "\n";
-		continue;
-	    }
-	    size_t s2 = line.find('\t', s+1);
-	    std::string id = line.substr(0, s);
-	    std::string func;
-	    if (s2 == std::string::npos)
-		func = line.substr(s+1);
-	    else
-		func = line.substr(s+1, s2 - s - 1);
-
-	    std::string stripped = strip_func_comment(func);
-	    id_function_map_[id] = stripped;
-	    // std::cerr << "Load '" << id << "' as '" << func << "' stripped='" << stripped << "'\n";
-	}
-    }
-
-    /*
-     * Load assignments and sequence visibility data from a fasta file.
-     *
-     * If the def line has an assignment on it, update the assignment map.
-     *
-     * We also update the function_genome map to record which functions appear
-     * in which genomes.
-     *
-     * We make the simplifying assumption that there is a 1:1 mapping
-     * between the proteins in a genome and the contents of a given fasta file.
-     */
-    void load_fasta_file(const fs::path &file, bool keep_function_flag) {
-
-	const boost::regex genome_regex("\\s+(.*)\\s+\\[([^]]+)\\]$");
-	const boost::regex figid_regex("fig\\|(\\d+\\.\\d+)");
-	const boost::regex genome_id_regex("\\d+\\.\\d+");
-	
-	fs::ifstream ifstr(file);
-
-	FastaParser parser;
-
-	std::string genome;
-
-	parser.set_def_callback([this, &genome, &genome_regex, &figid_regex, &genome_id_regex, &file, keep_function_flag]
-				(const std::string &id, const std::string &def, const std::string &seq) {
-		if (id.empty())
-		    return 0;
-
-		boost::smatch match;
-
-		//
-		// Need to always parse for [genome]
-		//
-
-		std::string func;
-		if (!def.empty())
-		{
-		    size_t x = def.find_first_not_of(" \t");
-		    func = def.substr(x);
-		}
-		std::string genome_loc;
-		if (boost::regex_match(def, match, genome_regex))
-		{
-		    func = strip_func_comment(match[1]);
-		    genome_loc = match[2];
-		}
-		
-		// Determine genome from first sequence.
-		if (genome.empty())
-		{
-		    if (def.empty())
-		    {
-			if (boost::regex_search(id, match, figid_regex))
-			{
-			    genome = match[1];
-			}
-		    }
-		    else
-		    {
-			if (!genome_loc.empty())
-			{
-			    genome = genome_loc;
-			}
-		    }
-		}
-		if (genome.empty())
-		{
-		    // default it to the file, just to have a value
-		    genome = file.leaf().string();
-		    
-		    if (!boost::regex_match(genome, genome_id_regex))
-		    {
-			std::cerr << "cannot determine genome from file " << file << "\n";
-		    }
-		}
-
-		/*
-		 *
-		 * If the current-function map has a value, use that. We assume explicit setting
-		 * of functions overrides what is in the fasta.
-		 *
-		 * If we're assigning a function, update the id to function
-		 * map.
-		 *
-		 * Then look up the function for this id and add to the function_genome map.
-		 */
-		std::string cur_func = id_function_map_[id];
-		if (cur_func.empty())
-		{
-		    if (!func.empty())
-		    {
-			id_function_map_[id] = func;
-		    }
-		}
-		else
-		{
-		    func = cur_func;
-		}
-		
-		if (func.empty())
-		{
-		    // std::cerr << "No function found for " << id << "\n";
-		}
-		else
-		{
-		    function_genome_map_[func].insert(genome);
-		    if (keep_function_flag)
-		    {
-			// std::cerr << "Keeping function " << func << "\n";
-			good_functions_.insert(func);
-		    }
-		}
-			
-		return 0;
-	    });
-	parser.parse(ifstr);
-	parser.parse_complete();
-    }
-
-    /*
-     * Process the contents of function_genome_map to determine which
-     * function for which we should build signatures.
-     *
-     * Criteria - one of the following must be met:
-     *
-     *    Genome count for a function >= min_reps_required
-     *
-     *    One of the roles in the function is in the good_roles set.
-     *
-     *    The function is in the good_functions set.
-     *
-     * For each function that we keep we will assign an identifier in the
-     * function_index_map which is then used as the means to describe
-     * which functions are to have signatures created.
-     */
-    void process_kept_functions(int min_reps_required) {
-	std::set<std::string> kept;
-	for (auto entry: function_genome_map_)
-	{
-	    auto function = entry.first;
-	    int n_genomes = (int) entry.second.size();
-	    kept_function_stream << function << ": " << n_genomes << " genomes\n";
-	    bool ok = false;
-
-	    if (n_genomes >= min_reps_required)
-	    {
-		kept_function_stream << "Keeping " << function << ": enough genomes\n";
-		ok = true;
-	    }
-	    else if (good_functions_.find(function) != good_functions_.end())
-	    {
-		kept_function_stream << "Keeping " << function << ": in good functions list\n";
-		ok = true;
-	    }
-	    else
-	    {
-		std::vector<std::string> roles = roles_of_function(function);
-		kept_function_stream << "Role check " << function << ":\n";
-		for (auto role: roles)
-		{
-		    if (good_roles_.find(role) != good_roles_.end())
-		    {
-			kept_function_stream << "  Keeping " << function << ": " << role << " in good roles list\n";
-			ok = true;
-			break;
-		    }
-		    else
-		    {
-			kept_function_stream << "  " << function << ": " << role << " not in list\n";
-		    }
-		}
-
-		if (!ok)
-		{
-		    kept_function_stream << "Reject " << function << "\n";
-		}
-	    }
-	    if (ok)
-		kept.insert(function);
-	}
-	// Ensure we have an ID for hypothetical protein
-	kept.insert("hypothetical protein");
-
-	/*
-	 * Assign sequential function IDs.
-	 */
-	unsigned short next = 0;
-	for (auto f: kept)
-	{
-	    unsigned short id = next++;
-	    function_index_map_[f] = id;
-	}
-	std::cout << "kept " << next << " functions\n";
-    }
-
-    void dump() {
-	for (auto x: function_genome_map_)
-	{
-	    std::cout << x.first << ":";
-	    for (auto y: x.second)
-		std::cout << " " << y;
-	    std::cout << "\n";
-	}
-	for (auto x: id_function_map_)
-	{
-	    std::cout << x.first << " '" << x.second << "'\n";
-	}
-    }
-
-    std::string lookup_function(const std::string &id) {
-	auto it = id_function_map_.find(id);
-	if (it == id_function_map_.end())
-	    return "";
-	else
-	    return it->second;
-    }
-    FunctionIndex lookup_index(const std::string &func) {
-	auto it = function_index_map_.find(func);
-	if (it == function_index_map_.end())
-	    return USHRT_MAX;
-	else
-	    return it->second;
-    }
-
-    void write_function_index(const fs::path &dir) {
-	fs::ofstream of(dir / "function.index");
-
-	std::map<int, std::string> by_index;
-	for (auto ent: function_index_map_)
-	    by_index.insert(std::make_pair(ent.second, ent.first));
-	for (auto ent: by_index)
-	{
-	    of << ent.first << "\t" << ent.second << "\n";
-	}
-    }
-
-    // Create a function-array for compatibility with kguts
-    char **create_kg_function_array(int *size) {
-	size_t n = function_index_map_.size();
-	char **ret = (char **) malloc(sizeof(char *) * n);
-	
-	for (auto ent: function_index_map_)
-	{
-	    if (ent.second >= n)
-	    {
-		std::cerr << "Bad ent=" << ent.second << " for n=" << n << "\n";
-		exit(1);
-	    }
-	    ret[ent.second] = const_cast<char *>(ent.first.c_str());
-	}
-	//for (int i = 0; i < n;  i++)
-	//    std::cerr << i << ": '" << ret[i] << "'\n";
-	*size = (int) n;
-	return ret;
-    }
-	
-
-    void add_good_roles(const std::vector<std::string> &r) {
-	std::copy(r.begin(), r.end(), std::inserter(good_roles_, good_roles_.end()));
-    }
-    
-    void add_good_functions(const std::vector<std::string> &r) {
-	std::copy(r.begin(), r.end(), std::inserter(good_functions_, good_functions_.end()));
-    }
-    
-private:
-    std::map<std::string, std::set<std::string> > function_genome_map_;
-    std::map<std::string, std::string> id_function_map_;
-    std::map<std::string, FunctionIndex> function_index_map_;
-
-    std::set<std::string> good_roles_;
-    std::set<std::string> good_functions_;
-};
-
 std::set<unsigned char> ok_prot = { 'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y',
 			   'a', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'k', 'l', 'm', 'n', 'p', 'q', 'r', 's', 't', 'v', 'w', 'y'};
 
@@ -589,15 +271,6 @@ void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned int &next_sequ
 {
     if (id.empty())
 	return;
-
-    /*
-     * CHECK THIS: we should be using using functions from our database.
-    std::string func = def;
-    if (func.empty())
-    {
-	func = fm.lookup_function(id);
-    }
-     */
 
     std::string func = fm.lookup_function(id);
     
@@ -634,7 +307,7 @@ void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned int &next_sequ
     {
         unsigned short n = (unsigned short) std::distance(it, seq.end());
 	Kmer kmer;
-	Kmer::iterator kiter = kmer.begin();
+	// Kmer::iterator kiter = kmer.begin();
 	bool ok = true;
 	std::copy_n(it, K, kmer.begin());
 	for (auto x: kmer)
@@ -648,7 +321,7 @@ void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned int &next_sequ
 	}
 	if (ok)
 	{
-	    m.insert({kmer, { function_index, UndefinedOTU, n, seq_id }});
+	    m.insert({kmer, { function_index, UndefinedOTU, n, seq_id, static_cast<unsigned int>(seq.length())}});
 	    // std::cout << kmer << " " << n << "\n";
 	}
 	else
@@ -665,7 +338,8 @@ void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned int &next_sequ
  * If a function index is not defined, this is not a function we wish
  * to process so skip this sequence.
  */
-void load_fasta(FunctionMap &fm, KmerAttributeMap &m, unsigned file_number, const fs::path &file)
+void load_fasta(FunctionMap &fm, KmerAttributeMap &m, unsigned file_number, const fs::path &file,
+		const std::set<std::string> &deleted_fids)
 {
     fs::ifstream ifstr(file);
 
@@ -673,10 +347,13 @@ void load_fasta(FunctionMap &fm, KmerAttributeMap &m, unsigned file_number, cons
     
     unsigned next_sequence_id = file_number * MaxSequencesPerFile;
 
-    parser.set_def_callback([&fm, &m, &next_sequence_id](const std::string &id, const std::string &def, const std::string &seq) {
+    parser.set_def_callback([&fm, &m, &next_sequence_id, &deleted_fids](const std::string &id, const std::string &def, const std::string &seq) {
+	if (deleted_fids.find(id) == deleted_fids.end())
+	{
 	    load_sequence(fm, m, next_sequence_id, id, def, seq);
-	    return 0;
-	});
+	}
+	return 0;
+    });
     parser.parse(ifstr);
     parser.parse_complete();
 }
@@ -730,6 +407,7 @@ void process_set(KmerSet &set)
     int best_count = best_count_1;
     FunctionIndex best_func = best_func_1;
 
+    if (rejected_stream.is_open() || kept_stream.is_open())
     {
 	tbb::mutex::scoped_lock lock(io_mutex);
 
@@ -759,30 +437,47 @@ void process_set(KmerSet &set)
 	if ((float) best_count < thresh)
 	{
 	    // std::cout << "discard for " << best_count << " < " << thresh << "\n";
-	    rejected_stream << set.kmer <<  " best_count=" << best_count << " thresh=" << thresh << "\n";
+	    if (rejected_stream.is_open())
+		rejected_stream << set.kmer <<  " best_count=" << best_count << " thresh=" << thresh << "\n";
 	    if ((float) (best_count_1 + best_count_2) >= thresh)
 	    {
-		kept_stream << "AMBIG\t" << best_func_1 << "\t"
-			    << best_func_2 << "\t"
-			    << best_count_1 << "\t"
-			    << best_count_2 << "\n";
+		if (kept_stream.is_open())
+		    kept_stream << "AMBIG\t" << best_func_1 << "\t"
+				<< best_func_2 << "\t"
+				<< best_count_1 << "\t"
+				<< best_count_2 << "\n";
 	    }
 	    return;
 	}
     }
+    else
+    {
+	if ((float) best_count < thresh)
+	    return;
+    }
 
     unsigned int seqs_containing_func = 0;
     std::vector<unsigned short> offsets;
+
+    acc::accumulator_set<unsigned short, acc::stats<acc::tag::mean,
+						  acc::tag::median,
+						  acc::tag::variance> > acc;
 
     for (auto item: set.set)
     {
 	if (item.func_index == best_func)
 	{
 	    seqs_containing_func++;
+	    acc(item.protein_length);
 	}
 	offsets.push_back(item.offset);
 	kmer_stats.seqs_with_a_signature.insert(item.seq_id);
     }
+
+    unsigned short mean = acc::mean(acc);
+    unsigned short median = acc::median(acc);
+    unsigned short var = acc::variance(acc);
+
     std::sort(offsets.begin(), offsets.end());
     unsigned short median_offset = offsets[offsets.size() / 2];
     // std::cout << seqs_containing_func << " " << median_offset<< "\n";
@@ -791,7 +486,7 @@ void process_set(KmerSet &set)
     kmer_stats.distinct_functions[best_func]++;
 
     kept_kmers.push_back(KeptKmer { set.kmer, median_offset, best_func, UndefinedOTU,
-		(unsigned int) set.set.size(), seqs_containing_func });
+	    (unsigned int) set.set.size(), seqs_containing_func, 0.0, mean, median, var });
 }
 
 
@@ -945,6 +640,7 @@ void write_function_index(const fs::path &dir, FunctionMap &fm)
     fm.write_function_index(dir);
 }
 
+
 KmerGuts *write_hashtable(const fs::path &dir, tbb::concurrent_vector<KeptKmer> &kmers)
 {
     std::vector<unsigned long> primes {3769,6337,12791,24571,51043,101533,206933,400187,
@@ -984,6 +680,31 @@ KmerGuts *write_hashtable(const fs::path &dir, tbb::concurrent_vector<KeptKmer> 
 	kguts->save_kmer_hash_table((dir / "kmer.table.mem_map").string());
     }
     return kguts;
+}
+
+void write_nudb_data(const std::string &nudb_file, tbb::concurrent_vector<KeptKmer> &kmers)
+{
+    typedef NuDBKmerDb<8> KDB;
+
+    KDB db(nudb_file);
+
+    if (!db.exists())
+    {
+	std::cerr << "creating new db\n";
+	db.create();
+    }
+    db.open();
+    
+    for (auto k: kmers)
+    {
+	// std::cout << k << "\n";
+	nudb::error_code ec;
+//	db.insert(k.kmer, { k.otu_index, k.median_offset, k.function_index, k.weight }, ec);
+	db.insert(k.kmer, { k.otu_index, k.median_offset, k.function_index, k.weight,
+		k.mean, k.median, k.var, static_cast<unsigned short>(k.seqs_containing_function) }, ec);
+//	if (!ec)
+//	    std::cerr << "insert error: " << ec.message() << "\n";
+    }
 }
 
 struct RecallData
@@ -1027,13 +748,50 @@ std::experimental::optional<RecallData> recall_sequence(FunctionMap &fm, KmerGut
     return ret;
 }
 
+std::experimental::optional<RecallData> recall_sequence(FunctionMap &fm, NuDBKmerDb<K> *db,
+//		    fs::ofstream &calls_stream, fs::ofstream &new_stream,
+		    const std::string &id, const std::string &seq)
+{
+
+    if (id.empty())
+	return {};
+//    typedef std::vector<KmerCall> call_vector_t;
+
+    return {};
+#if 0
+    std::shared_ptr<call_vector_t> calls_ = std::make_shared<call_vector_t>();
+    call_vector_t &calls = *calls_;
+
+    // std::cout << id << ":\n";
+    // std::cout << seq << "\n";
+
+    kguts->process_aa_seq(id, seq, calls_, 0, 0);
+
+    /*
+    for (auto x: *calls_)
+    {
+	std::cout << "  " << x << "\n";
+    }
+    */
+	    
+    FunctionIndex best_fi;
+    RecallData ret;
+    kguts->find_best_call(calls, best_fi, ret.new_function, ret.score, ret.weighted_score, ret.score_offset);
+
+    ret.old_function = fm.lookup_function(id);
+
+    return ret;
+#endif
+}
+
 /*
  * Recall a fasta file using our just-computed signatures.
  *
  * calls_dir is where we write the new calls; new_dir is where we write
  * the changed annotationsl
  */
-void recall_fasta(FunctionMap &fm, const fs::path &file, KmerGuts *kguts,
+template<typename Caller>
+void recall_fasta(FunctionMap &fm, const fs::path &file, Caller *caller,
 		  fs::path calls_dir, fs::path new_dir)
 {
     fs::ifstream ifstr(file);
@@ -1046,8 +804,8 @@ void recall_fasta(FunctionMap &fm, const fs::path &file, KmerGuts *kguts,
 
     FastaParser parser;
     
-    auto cb = [&fm, kguts, &calls_stream, &new_stream](const std::string &id, const std::string &seq) {
-	auto res = recall_sequence(fm, kguts, id, seq);
+    auto cb = [&fm, caller, &calls_stream, &new_stream](const std::string &id, const std::string &seq) {
+	auto res = recall_sequence(fm, caller, id, seq);
 	if (res)
 	{
 	    if (res->new_function != res->old_function)
@@ -1163,6 +921,7 @@ bool process_command_line_options(int argc, char *argv[],
 				  std::vector<fs::path> &fasta_data_kept_functions,
 				  std::vector<std::string> &good_functions,
 				  std::vector<std::string> &good_roles,
+				  fs::path &deleted_fids_file,
 				  int &min_reps_required,
 				  fs::path &recall_output_path,
 				  fs::path &validation_folder_path,
@@ -1171,6 +930,7 @@ bool process_command_line_options(int argc, char *argv[],
 				  int &recall_max_gap,
 				  fs::path &kmer_data_dir,
 				  fs::path &final_kmers,
+				  std::string &nudb_file,
 				  int &n_threads)
 {
     std::ostringstream x;
@@ -1197,7 +957,9 @@ bool process_command_line_options(int argc, char *argv[],
 	("fasta-keep-functions-dir,K", po::value<std::vector<std::string>>(&fasta_keep_dirs), "Directory of fasta files of protein data (keep functions defined here)")
 	("good-functions", po::value<std::vector<std::string>>(&good_function_files), "File containing list of functions to be kept")
 	("good-roles", po::value<std::vector<std::string>>(&good_role_files), "File containing list of roles to be kept")
+	("deleted-features-file", po::value<fs::path>(&deleted_fids_file), "File containing list of deleted feature IDs")
 	("kmer-data-dir", po::value<fs::path>(&kmer_data_dir), "Write kmer data files to this directory")
+	("nudb-file", po::value<std::string>(&nudb_file), "Write saved kmers to this NuDB file base. Should be on a SSD drive.")
 	("min-reps-required", po::value<int>(&min_reps_required), "Minimum number of genomes a function must be seen in to be considered for kmers")
 	("final-kmers", po::value<fs::path>(&final_kmers), "Write final.kmers file to be consistent with km_build_Data")
 	("recall-output", po::value<std::string>(&recall_output), "Recall proteins and write output to this path")
@@ -1259,12 +1021,11 @@ bool process_command_line_options(int argc, char *argv[],
 int main(int argc, char *argv[])
 {
     KmerAttributeMap m;
-    FunctionMap fm;
     unsigned next_sequence_id = 0;
 
-    rejected_stream.open("rejected.by.build_signature_kmers");
-    kept_stream.open("kept.by.build_signature_kmers");
-    kept_function_stream.open("function.kept.log");
+    // rejected_stream.open("/dev/shm/rejected.by.build_signature_kmers");
+    // kept_stream.open("kept.by.build_signature_kmers");
+    // kept_function_stream.open("function.kept.log");
 
     std::vector<fs::path> function_definitions;
     std::vector<fs::path> fasta_data;
@@ -1275,17 +1036,20 @@ int main(int argc, char *argv[])
 
     fs::path recall_output_path;
     fs::path final_kmers;
+    fs::path deleted_fids_file;
     fs::path kmer_data_dir;
 
     fs::path validation_folder;
     bool validation_verbose = false;
 
-    int min_reps_required = 5;
+    int min_reps_required = 3;
 
     int recall_min_hits;
     int recall_max_gap;
     
     int n_threads;
+
+    std::string nudb_file;
 
     if (!process_command_line_options(argc, argv,
 				      function_definitions,
@@ -1293,6 +1057,7 @@ int main(int argc, char *argv[])
 				      fasta_data_kept_functions,
 				      good_functions,
 				      good_roles,
+				      deleted_fids_file,
 				      min_reps_required,
 				      recall_output_path,
 				      validation_folder,
@@ -1301,9 +1066,27 @@ int main(int argc, char *argv[])
 				      recall_max_gap,
 				      kmer_data_dir,
 				      final_kmers,
+				      nudb_file,
 				      n_threads))
     {
 	return 1;
+    }
+
+    FunctionMap fm((kmer_data_dir / "kept_functions.log").string());
+
+    std::set<std::string> deleted_fids;
+    /*
+     * Read deleted fids if present.
+     */
+    if (!deleted_fids_file.empty())
+    {
+	fs::ifstream ifstr(deleted_fids_file);
+	std::string line;
+	while (std::getline(ifstr, line, '\n'))
+	{
+	    deleted_fids.emplace(line);
+	}
+	
     }
 
     /*
@@ -1380,17 +1163,16 @@ int main(int argc, char *argv[])
 
     for (auto fasta: fasta_data)
     {
-	fm.load_fasta_file(fasta, false);
+	fm.load_fasta_file(fasta, false, deleted_fids);
 	all_fasta_data.emplace_back(fasta);
     }
 
     for (auto fasta: fasta_data_kept_functions)
     {
-	fm.load_fasta_file(fasta, true);
+	fm.load_fasta_file(fasta, true, deleted_fids);
 	all_fasta_data.emplace_back(fasta);
     }
 
-    // fm.dump();
     /*
      * Process the list of functions and
      * manage the set that we want to keep.
@@ -1411,6 +1193,11 @@ int main(int argc, char *argv[])
 	}
     }
     
+    if (0)
+    {
+	fm.dump();
+	exit(0);
+    }
     /*
      * With that done, go ahead and extract kmers.
      */
@@ -1419,19 +1206,19 @@ int main(int argc, char *argv[])
     {
 	for (unsigned i = 0; i < (unsigned) all_fasta_data.size(); i++)
 	{
-	    load_fasta(fm, m, i, all_fasta_data[i]);
+	    load_fasta(fm, m, i, all_fasta_data[i], deleted_fids);
 	}
     }
     else
     {
 	size_t n = all_fasta_data.size();
 	tbb::parallel_for(tbb::blocked_range<size_t>(0, n),
-			  [&fm, &m, &next_sequence_id, &all_fasta_data](const tbb::blocked_range<size_t> &r) {
+			  [&fm, &m, &next_sequence_id, &all_fasta_data, &deleted_fids](const tbb::blocked_range<size_t> &r) {
 			      for (size_t i = r.begin(); i != r.end(); ++i)
 			      {
 				  auto fasta = all_fasta_data[i];
 				  std::cout << "load file " << i << " " << fasta << "\n";
-				  load_fasta(fm, m, (unsigned) i, fasta);
+				  load_fasta(fm, m, (unsigned) i, fasta, deleted_fids);
 			      }
 			  });
     }
@@ -1441,12 +1228,24 @@ int main(int argc, char *argv[])
     process_kmers(m);
     g_kmer_processor->stop();
     */
+    std::cerr << "processing kmers\n";
     par_process_kmers(m);
     std::cout << "Kept " << kept_kmers.size() << " kmers\n";
     std::cout << "distinct_signatures=" << kmer_stats.distinct_signatures << "\n";
     std::cout << "num_seqs_with_a_signature=" << kmer_stats.seqs_with_a_signature.size() << "\n";
     std::cerr << "computing weights\n";
-    std::for_each(kept_kmers.begin(), kept_kmers.end(), compute_weight_of_signature);
+//    std::for_each(kept_kmers.begin(), kept_kmers.end(), compute_weight_of_signature);
+
+    size_t nk = kept_kmers.size();
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, nk),
+			  [](const tbb::blocked_range<size_t> &r) {
+			      for (size_t i = r.begin(); i != r.end(); ++i)
+			      {
+				  compute_weight_of_signature(kept_kmers[i]);
+			      }
+			  });
+
+    
     std::cerr << "done\n";
 
     if (!final_kmers.empty())
@@ -1460,35 +1259,57 @@ int main(int argc, char *argv[])
 	std::cerr << "done\n";
     }
 
+    /*    
     std::cerr << "writing hashtable to " << kmer_data_dir << " ...\n";
     KmerGuts *kguts = write_hashtable(kmer_data_dir, kept_kmers);
     std::cerr << "writing hashtable to " << kmer_data_dir << " done\n";
+    */
+
+    if (!nudb_file.empty())
+    {
+	write_nudb_data(nudb_file, kept_kmers);
+    }
     
     /*
      * Ick.
      */
     fs::path fidx = kmer_data_dir / "function.index";
     // kguts->kmersH->function_array = kguts->load_functions(fidx.c_str(), &kguts->kmersH->function_count);
+#if 0
     kguts->kmersH->function_array = fm.create_kg_function_array(&kguts->kmersH->function_count);
     kguts->kmersH->otu_array = kguts->load_otus("/dev/null", &kguts->kmersH->otu_count);
 
+    kguts->min_hits = recall_min_hits;
+    kguts->max_gap = recall_max_gap;
+
+    KmerGuts *shared_kguts = kguts;
+
+#else
+    NuDBKmerDb<K> db(nudb_file);
+    db.open();
+#endif
+
     if (!recall_output_path.empty())
     {
-	kguts->min_hits = recall_min_hits;
-	kguts->max_gap = recall_max_gap;
-
-	KmerGuts *shared_kguts = kguts;
 	size_t n = all_fasta_data.size();
 
 	if (n_threads >= 1)
 	{
 	    std::cerr << "starting recall of " << n << " genomes with " << n_threads << " threads\n";
 	    tbb::parallel_for(tbb::blocked_range<size_t>(0, n),
-			      [&fm, &shared_kguts, recall_calls_dir, recall_new_dir, all_fasta_data, kmer_data_dir,
+			      [&fm,
+			       #if 0
+			       &shared_kguts,
+			       #else
+			       &db,
+			       #endif
+			       recall_calls_dir, recall_new_dir, all_fasta_data, kmer_data_dir,
 			       recall_min_hits, recall_max_gap, fidx](const tbb::blocked_range<size_t> &r) {
 
 				  //KmerGuts *kguts = new KmerGuts(dir, shared_kguts->image_);
+				  #if 0
 				  KmerGuts kguts(*shared_kguts);
+				  #endif
 				  //boost::thread_specific_ptr<KmerGuts> kguts;
 				  //kguts.reset(new KmerGuts(*shared_kguts));
 
@@ -1505,7 +1326,7 @@ int main(int argc, char *argv[])
 				  for(size_t i=r.begin(); i!=r.end(); ++i)
 				  {
 				      fs::path file = all_fasta_data[i];
-				      recall_fasta(fm, file, &kguts, recall_calls_dir, recall_new_dir);
+				      recall_fasta(fm, file, &db, recall_calls_dir, recall_new_dir);
 				  }
 			      });
 	}
@@ -1516,13 +1337,15 @@ int main(int argc, char *argv[])
 	    {
 		//KmerGuts k(*kguts);
 		//KmerGuts &k = *kguts;
-		recall_fasta(fm, file, kguts, recall_calls_dir, recall_new_dir);
+		recall_fasta(fm, file, &db, recall_calls_dir, recall_new_dir);
 	    }
 	}
     }
 
+#if 0
     if (!validation_folder.empty())
     {
+
 	kguts->min_hits = recall_min_hits;
 	kguts->max_gap = recall_max_gap;
 
@@ -1578,12 +1401,14 @@ int main(int argc, char *argv[])
 			      }
 			  });
     }
+#endif
 
     std::cerr << "all done\n";
 
+/*
     free(kguts->kmer_image_for_loading_);
     delete kguts;
-
+*/
     show_ps();
     rejected_stream.close();
     kept_stream.close();

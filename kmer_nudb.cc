@@ -1,5 +1,6 @@
 #include "kmer_nudb.h"
 
+#include <cmath>
 #include <algorithm>
 #include <memory>
 #include <iostream>
@@ -19,16 +20,149 @@
 #include <errno.h>
 #include <string.h>
 
+#include <boost/filesystem.hpp>
+#include <boost/filesystem/fstream.hpp>
 #include <boost/program_options.hpp>
 #include "global.h"
+#include "codet.h"
 
-KmerNudb::KmerNudb(const std::string &file_base)
+namespace fs = boost::filesystem;
+
+// Utility for hit processing
+class HitSet
 {
+public:
+    struct hit
+    {
+	NuDBKmerDb<KMER_SIZE>::KData kdata;
+	unsigned long pos;
+    };
+
+    HitSet(int seq_len, int min_hits, float min_weighted_hits)
+	: seq_len_(seq_len)
+	,min_hits_(min_hits)
+	, min_weighted_hits_(min_weighted_hits)
+	{
+    }
+
+    void reset();
+    template< class... Args >
+    void emplace_back( Args&&... args ) {
+	hits_.emplace_back(std::forward<Args>(args)...);
+    }
+
+    auto rbegin() { return hits_.rbegin(); }
+
+    bool empty() { return hits_.empty(); }
+    int count() { return static_cast<int>(hits_.size()); }
+    auto clear() { return hits_.size(); }
+    hit& last_hit() { return hits_.back(); }
+    void process(FunctionIndex &current_fI,
+		 std::shared_ptr<std::vector<KmerCall>> calls,
+		 std::shared_ptr<KmerOtuStats> otu_stats) {
+
+	int fI_count = 0;
+	float weighted_hits = 0;
+	decltype(hits_)::iterator last_hit;
+
+	CoefficentOfDetermination codet(static_cast<double>(seq_len_));
+	for (auto h_iter = hits_.begin(); h_iter != hits_.end(); h_iter++)
+	{
+	    if (h_iter->kdata.function_index == current_fI)
+	    {
+		codet.insert(static_cast<double>(h_iter->kdata.mean));
+		last_hit = h_iter;
+		fI_count++;
+		weighted_hits += h_iter->kdata.function_wt;
+	    }
+	}
+	if ((fI_count >= min_hits_) && (weighted_hits >= min_weighted_hits_))
+	{
+	    if (calls)
+	    {
+		double r2 = codet.compute();
+		//double r2 = codet.deviation();
+		calls->push_back({ static_cast<unsigned int>(hits_[0].pos),
+			static_cast<unsigned int>(last_hit->pos + (KMER_SIZE-1)), fI_count, current_fI, weighted_hits, r2 });
+	    }
+
+	    /* once we have decided to call a region, we take the kmers for fI and
+	       add them to the counts maintained to assign an OTU to the sequence */
+	    
+	    if (otu_stats)
+	    {
+		for (auto ki = hits_.begin(); ki != last_hit; ki++)
+		{
+		    if (ki->kdata.function_index == current_fI)
+		    {
+			otu_stats->otu_map[ki->kdata.otu_index]++;
+		    }
+		}
+	    }
+	}
+	
+	auto end = hits_.rbegin();
+	
+	if (end[1].kdata.function_index != current_fI &&
+	    end[1].kdata.function_index == end[0].kdata.function_index)
+	{
+	    current_fI = end[1].kdata.function_index;
+	    // std::cerr << "reset cur=" << cur_fi << "\n";
+	    hits_.erase(hits_.begin(), hits_.end() - 2);
+	    // std::cerr << "after erase:\n";
+	    //for (auto x: hits)
+	    //std::cerr << x << "\n";
+	}
+	else {
+	    hits_.clear();
+	}
+    }
+
+    std::vector<hit> hits_;
+    int seq_len_;
+    int min_hits_;
+    float min_weighted_hits_;
+};
+
+
+KmerNudb::KmerNudb(NuDBKmerDb<KMER_SIZE> &db, const std::string &function_index_file,
+		   int min_hits, float min_weighted_hits, int max_gap) :
+    db_(db),
+    order_constraint_(false),
+    min_hits_(min_hits),
+    min_weighted_hits_(min_weighted_hits),
+    max_gap_(max_gap)
+{
+    read_function_index(function_index_file);
 }
 
 KmerNudb::~KmerNudb() {
 }
 
+void KmerNudb::read_function_index(const std::string &function_index_file)
+{
+    fs::ifstream ifstr(function_index_file);
+    std::string line;
+    int max_id = 0;
+    while (std::getline(ifstr, line, '\n'))
+    {
+	auto tab = line.find('\t');
+	int id = std::stoi(line.substr(0, tab));
+	if (id > max_id)
+	    max_id = id;
+    }
+    ifstr.close();
+    ifstr.open(function_index_file);
+
+    function_index_.resize(max_id + 1);
+    
+    while (std::getline(ifstr, line, '\n'))
+    {
+	auto tab = line.find('\t');
+	int id = std::stoi(line.substr(0, tab));
+	function_index_[id] = line.substr(tab + 1);
+    }
+}
 
 /*
 void KmerNudb::process_set_of_hits(std::shared_ptr<std::vector<KmerCall>> calls,
@@ -46,12 +180,81 @@ void KmerNudb::process_aa_seq_hits(const std::string &id, const std::string &seq
     process_aa_seq(id, seq, calls, cb, otu_stats);
 }
 
+void KmerNudb::gather_hits(const std::string &seqstr,
+			   std::shared_ptr<std::vector<KmerCall>> calls,
+			   std::function<void(const hit_in_sequence_t &)> hit_cb,
+			   std::shared_ptr<KmerOtuStats> otu_stats)
+{
+    HitSet hits(seqstr.length(), min_hits_, min_weighted_hits_);
+    FunctionIndex current_fI = UndefinedFunction;
+    double seqlen = static_cast<double>(seqstr.length());
+    for_each_kmer<KMER_SIZE>(seqstr, [this, &calls, &hit_cb, &otu_stats, &hits, &current_fI, seqlen]
+			     (const std::array<char, KMER_SIZE> &kmer, size_t offset) {
+	// std::cerr << "process " << kmer << "\n";
+	
+	nudb::error_code ec;
+	db_.fetch(kmer, [this, hit_cb, offset, &hits, &calls, &otu_stats, &current_fI, &kmer, seqlen]
+		  (const NuDBKmerDb<KMER_SIZE>::KData *kdata) {
+	    /*
+	    double z = kdata->var == 0 ? 0.0 : (seqlen - static_cast<double>(kdata->mean)) /
+		sqrt(static_cast<double>(kdata->var));
+  	    std::cerr << "fetch got " << kdata->function_index << " " << kdata->mean << " " << kdata->median << " " << kdata->var << " " << z << "\n";
+	    */
+	    if (hit_cb != nullptr)
+		hit_cb(hit_in_sequence_t({0L, kdata->otu_index, kdata->avg_from_end, kdata->function_index, kdata->function_wt}, offset, kmer, kdata));
+
+	    // std::cerr << kmer << "\t" << offset << "\t" << kdata->function_index << "\n";
+	    // Is this hit beyond max_gap_ of the last one?
+	    if (!hits.empty() && hits.last_hit().pos + max_gap_ < offset)
+	    {
+		if (hits.count() >= min_hits_)
+		    hits.process(current_fI, calls, otu_stats);
+		else
+		    hits.clear();
+	    }
+	    if (hits.empty())
+	    {
+		current_fI = kdata->function_index;
+	    }
+	    
+	    if (!order_constraint_ ||
+		hits.empty() ||
+		(kdata->function_index == hits.last_hit().kdata.function_index &&
+		 labs((offset - hits.last_hit().pos) -
+		      (hits.last_hit().kdata.avg_from_end - kdata->avg_from_end)) <= 20))
+	    {
+		hits.emplace_back(HitSet::hit{*kdata, offset});
+		/*
+		 * If we have a pair of new functions, it is time to
+		 * process one set and initialize the next.
+		 */
+		if (hits.count() > 1 && current_fI != kdata->function_index)
+		{
+		    auto end = hits.rbegin();
+		    if (end[1].kdata.function_index == end[0].kdata.function_index)
+		    {
+			hits.process(current_fI, calls, otu_stats);
+		    }
+		}
+	    }
+
+	}, ec);
+	if (ec && ec != nudb::error::key_not_found)
+	{
+	    std::cerr << ec.message() << "\n";
+	}
+    });
+    if (hits.count() >= min_hits_)
+	hits.process(current_fI, calls, otu_stats);
+}
+
 void KmerNudb::process_aa_seq(const std::string &idstr, const std::string &seqstr,
 			      std::shared_ptr<std::vector<KmerCall>> calls,
 			      std::function<void(const hit_in_sequence_t &)> hit_cb,
 			      std::shared_ptr<KmerOtuStats> otu_stats)
 {
-//    gather_hits2(idstr, seqstr, calls, hit_cb, otu_stats);
+    gather_hits(seqstr, calls, hit_cb, otu_stats);
+
     if (otu_stats)
 	otu_stats->finalize();
 }
@@ -68,7 +271,7 @@ std::string KmerNudb::format_call(const KmerCall &c)
 {
     std::ostringstream oss;
     oss << "CALL\t" << c.start << "\t" << c.end << "\t" << c.count;
-//    oss << "\t" << c.function_index << "\t" << function_at_index(c.function_index);
+    oss << "\t" << c.function_index << "\t" << function_at_index(c.function_index);
     oss << "\t" << c.weighted_hits << "\n";
 
     return oss.str();
@@ -78,10 +281,7 @@ std::string KmerNudb::format_hit(const hit_in_sequence_t &h)
 {
     std::ostringstream oss;
 
-    char dc[KMER_SIZE + 1];
-    encoder_.decoded_kmer(h.hit.which_kmer, dc);
-
-//    oss << "HIT\t" << h.offset << "\t" << dc << "\t" << h.hit.avg_from_end << "\t" << function_at_index(h.hit.function_index) << "\t" << h.hit.function_wt << "\t" << h.hit.otu_index << "\n";
+    oss << "HIT\t" << h.offset << "\t" << "\t" << h.hit.avg_from_end << "\t" << function_at_index(h.hit.function_index) << "\t" << h.hit.function_wt << "\t" << h.hit.otu_index << "\n";
     
     return oss.str();
 }
@@ -264,7 +464,7 @@ void KmerNudb::find_best_call(std::vector<KmerCall> &calls, FunctionIndex &funct
     {
 	std::partial_sort(vec.begin(), vec.begin() +  2, vec.end(), 
 			  [](const ent_t& s1, const ent_t& s2) {
-			      return s1.second.weighted > s2.second.weighted; });
+			      return (s1.second.weighted > s2.second.weighted) || (s1.second.count > s2.second.count); });
     }
     
 #if 0
@@ -286,7 +486,7 @@ void KmerNudb::find_best_call(std::vector<KmerCall> &calls, FunctionIndex &funct
     {
 	auto best = vec[0];
 	function_index = best.first;
-//	function = function_at_index(function_index);
+	function = function_at_index(function_index);
 	score = (float) best.second.count;
 	weighted_score = best.second.weighted;
     }
@@ -300,6 +500,7 @@ void KmerNudb::find_best_call(std::vector<KmerCall> &calls, FunctionIndex &funct
 	 * Try to compute a fallback function naming the two best hits if there are two hits within the
 	 * threshold but greater than the next hit.
 	 */
+	#if 0
 	if (vec.size() >= 2)
 	{
 	    std::string f1 = function_at_index(vec[0].first);
@@ -324,5 +525,6 @@ void KmerNudb::find_best_call(std::vector<KmerCall> &calls, FunctionIndex &funct
 		}
 	    }
 	}
+	#endif
     }
 }

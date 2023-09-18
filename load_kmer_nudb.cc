@@ -67,7 +67,7 @@ int main()
 	    kdata.function_wt = std::stof(cols[3]);
 	    kdata.otu_index = 0;
 	    if (!cols[4].empty())
-		kdata.otu_index = std::stoi(cols[4]);
+ 		kdata.otu_index = std::stoi(cols[4]);
 
 	    db.insert(&enc, &kdata, sizeof(kdata), ec);
 	    if (ec)

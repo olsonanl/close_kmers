@@ -6,28 +6,11 @@
 #include <vector>
 #include <algorithm>
 #include <cstdio>
+#include <iostream>
+#include <iterator>
 
-/**
- * Function indexes are use to reference the entries in function.index
- * which represent function strings assigned to proteins.
- */
-typedef unsigned short FunctionIndex;
-
-/**
- * Value representing a missing or undefined function.
- */
-const FunctionIndex UndefinedFunction = USHRT_MAX;
-
-/**
- * OTU indexes are use to reference the entries in otu.index
- * which represent OTUs associated with kmers.
- */
-typedef unsigned short OTUIndex;
-
-/**
- * Value representing a missing or undefined function.
- */
-const FunctionIndex UndefinedOTU = USHRT_MAX;
+#include "kmer_value_types.h"
+#include "nudb_kmer_db.h"
 
 class KmerResult
 {
@@ -60,15 +43,23 @@ struct KData {
     float function_wt;
 };
 
+// V690 The 'hit_in_sequence_t' class implements a copy constructor, but lacks the copy assignment operator. It is dangerous to use such a class.
 struct hit_in_sequence_t {
     sig_kmer_t hit;
     unsigned int offset;
-    
-    hit_in_sequence_t(const sig_kmer_t &h, unsigned int o) : hit(h), offset(o) {}
-hit_in_sequence_t(const hit_in_sequence_t &h) : hit(h.hit), offset(h.offset) {}
 
-hit_in_sequence_t(unsigned long long enc, const KData &k, unsigned int o) :
-    hit {enc, k.otu_index, k.avg_from_end, k.function_index, k.function_wt}, offset{o} {}
+    typedef std::array<char, 8> kmer_type;
+    typedef NuDBKmerDb<8>::KData kdata_type;
+    kmer_type kmer;
+    const kdata_type *kdata;
+    
+    hit_in_sequence_t(const sig_kmer_t &h, unsigned int o, const kmer_type &k, const kdata_type *kd)
+	: hit(h), offset(o), kmer(k), kdata(kd) {}
+    hit_in_sequence_t(const sig_kmer_t &h, unsigned int o) : hit(h), offset(o), kdata(0) {}
+    hit_in_sequence_t(const hit_in_sequence_t &h) : hit(h.hit), offset(h.offset), kmer(h.kmer), kdata(h.kdata) {}
+
+    hit_in_sequence_t(unsigned long long enc, const KData &k, unsigned int o) :
+	hit {enc, k.otu_index, k.avg_from_end, k.function_index, k.function_wt}, offset{o}, kdata(0) {}
 
 };
 
@@ -92,14 +83,18 @@ public:
     int count;
     FunctionIndex function_index;
     float weighted_hits;
+    double r2;
 
-    KmerCall() : start(0), end(0), count(0), function_index(UndefinedFunction), weighted_hits(0.0) { }
-    KmerCall(unsigned int s, unsigned int e, int c, FunctionIndex f, float w)  :
-        start(s), end(e), count(c), function_index(f), weighted_hits(w) { }
-KmerCall(KmerCall &&k) :
-        start(k.start), end(k.end), count(k.count), function_index(k.function_index), weighted_hits(k.weighted_hits) { }
-KmerCall(const KmerCall &k) :
-        start(k.start), end(k.end), count(k.count), function_index(k.function_index), weighted_hits(k.weighted_hits) { }
+    KmerCall() : start(0), end(0), count(0), function_index(UndefinedFunction), weighted_hits(0.0), r2(0.0) { }
+    KmerCall(unsigned int s, unsigned int e, int c, FunctionIndex f, float w, double r = 0.0)  :
+        start(s), end(e), count(c), function_index(f), weighted_hits(w), r2(r) { }
+    KmerCall(KmerCall &&k) :
+        start(k.start), end(k.end), count(k.count),
+	function_index(k.function_index), weighted_hits(k.weighted_hits),
+	r2(k.r2) { }
+    KmerCall(const KmerCall &k) :
+        start(k.start), end(k.end), count(k.count), function_index(k.function_index),
+	weighted_hits(k.weighted_hits), r2(k.r2) { }
 
 };
 
@@ -188,5 +183,13 @@ KmerParameters() :
     int   min_weighted_hits;
     int   max_gap;
 };
+
+template <class T, std::size_t N>
+inline std::ostream& operator<<(std::ostream& o, const std::array<T, N>& arr)
+{
+    std::copy(arr.cbegin(), arr.cend(), std::ostream_iterator<T>(o, ""));
+    return o;
+}
+
 
 #endif /* _kmer_types_h */

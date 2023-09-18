@@ -144,6 +144,7 @@ COMMAND LINE ARGUMENTS:
 #include "kmer_encoder.h"
 #include "kmer_types.h"
 
+// V690 The 'KmerGuts' class implements a copy constructor, but lacks the copy assignment operator. It is dangerous to use such a class.
 class KmerGuts
 {
 public:

@@ -90,6 +90,11 @@ KmerGuts::KmerGuts(const std::string &data_dir, unsigned long long num_buckets) 
 
     unsigned long long image_size = sizeof(kmer_memory_image_t) + (sizeof(sig_kmer_t) * num_buckets);
     kmer_memory_image_t *image = static_cast<kmer_memory_image_t *>(malloc(image_size));
+    if (image == 0)
+    {
+	std::cerr << "Memory allocation of size " << image_size << " failed\n";
+	exit(1);
+    }
     std::cerr << "Allocated image of size " << image_size << "\n";
     memset(image, 0, image_size);
     image->num_sigs = num_buckets;
@@ -535,7 +540,15 @@ void KmerGuts::translate(const char *seq,int off,char *pseq, unsigned char *pIse
 
 char **KmerGuts::load_indexed_ar(const char *filename,int *sz) {
     char **index_ar = (char **) malloc(MAX_FUNC_OI_INDEX * sizeof(char *));
+    if (index_ar == 0) {
+	std::cerr << "Malloc failed at " __FILE__ " " << __LINE__ << "\n";
+	exit(1);
+    }
     char *vals      = (char *)malloc(MAX_FUNC_OI_VALS);
+    if (vals == 0) {
+	std::cerr << "Malloc failed at " __FILE__ " " << __LINE__ << "\n";
+	exit(1);
+    }
     to_be_freed.push_back(vals);
   char *p         = vals;
   FILE *ifp      = fopen(filename,"r");
@@ -600,6 +613,11 @@ kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long long num_
   *alloc_sz = sizeof(kmer_memory_image_t) + (sizeof(sig_kmer_t) * num_entries);
 
   kmer_memory_image_t *image = (kmer_memory_image_t *) malloc(*alloc_sz);
+  if (image == 0)
+  {
+      std::cerr << "Malloc failed at " __FILE__ << ":" << __LINE__ << "\n";
+      exit(1);
+  }
 
   /*
    * Initialize our table pointer to the first byte after the header.
@@ -619,30 +637,36 @@ kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long long num_
   for (unsigned long long i = 0; (i < size_hash); i++)
     sig_kmers[i].which_kmer = MAX_ENCODED + 1;
 
-  char kmer_string[KMER_SIZE+1];
+  char kmer_string[32] { 0 };
   unsigned short end_off;
   FunctionIndex fI;
   float f_wt;
   OTUIndex oI;
   unsigned long long loaded = 0;
-  while (fscanf(ifp,"%s\t%hu\t%hu\t%f\t%hu",
+  while (fscanf(ifp,"%31s\t%hu\t%hu\t%f\t%hu",
 		kmer_string,&end_off,&fI,&f_wt,&oI) >= 4) {
-    unsigned long long encodedK = encoded_aa_kmer(kmer_string);
-    unsigned long long hash_entry = find_empty_hash_entry(sig_kmers,encodedK);
-    loaded++;
-    if (loaded >= (size_hash / 2)) {
-      fprintf(stderr,"Your Kmer hash is half-full; use -s (and -w) to bump it\n");
-      exit(1);
-    }
-    sig_kmers[hash_entry].which_kmer     = encodedK;
-    sig_kmers[hash_entry].avg_from_end   = end_off;
-    sig_kmers[hash_entry].function_index = fI;
-    sig_kmers[hash_entry].otu_index      = oI;
-    sig_kmers[hash_entry].function_wt    = f_wt;
+      if (strlen(kmer_string) != KMER_SIZE)
+      {
+	  fprintf(stderr, "Invalid kmer read (size=%d != %d)\n", strlen(kmer_string), KMER_SIZE);
+	  exit(1);
+      }
+
+      unsigned long long encodedK = encoded_aa_kmer(kmer_string);
+      unsigned long long hash_entry = find_empty_hash_entry(sig_kmers,encodedK);
+      loaded++;
+      if (loaded >= (size_hash / 2)) {
+	  fprintf(stderr,"Your Kmer hash is half-full; use -s (and -w) to bump it\n");
+	  exit(1);
+      }
+      sig_kmers[hash_entry].which_kmer     = encodedK;
+      sig_kmers[hash_entry].avg_from_end   = end_off;
+      sig_kmers[hash_entry].function_index = fI;
+      sig_kmers[hash_entry].otu_index      = oI;
+      sig_kmers[hash_entry].function_wt    = f_wt;
   }
   if (debug >= 2)
-    fprintf(stderr,"loaded %lld kmers\n",loaded);
-
+      fprintf(stderr,"loaded %lld kmers\n",loaded);
+  
   fclose(ifp);
   return image;
 }

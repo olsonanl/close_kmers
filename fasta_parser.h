@@ -19,11 +19,11 @@ public:
 
     FastaParser();
 
-    void set_callback(std::function<int(const std::string &id, const std::string &seq)> on_seq) {
+    void set_callback(std::function<void(const std::string &id, const std::string &seq)> on_seq) {
 	on_seq_ = on_seq;
     }
     
-    void set_def_callback(std::function<int(const std::string &id, const std::string &def, const std::string &seq)> on_seq) {
+    void set_def_callback(std::function<void(const std::string &id, const std::string &def, const std::string &seq)> on_seq) {
 	on_def_seq_ = on_seq;
     }
 
@@ -117,7 +117,7 @@ public:
 	    }
 	    else if (c == '\n')
 	    {
-		cur_state_ = s_id_or_data;
+		// No change. cur_state_ = s_id_or_data;
 	    }
 	    else if (isalpha(c))
 	    {
@@ -152,8 +152,8 @@ private:
     std::string cur_seq_;
     std::string cur_def_;
     
-    std::function<int(const std::string &id, const std::string &seq)> on_seq_;
-    std::function<int(const std::string &id, const std::string &def, const std::string &seq)> on_def_seq_;
+    std::function<void(const std::string &id, const std::string &seq)> on_seq_;
+    std::function<void(const std::string &id, const std::string &def, const std::string &seq)> on_def_seq_;
     std::function<bool(const std::string &err, int line, const std::string id)> on_error_;
     void call_callback()
     {

@@ -28,6 +28,8 @@ NRLoader::NRLoader(NRLoadState &load_state, const std::string &file,
     root_mapping_(root_mapping),
     thread_pool_(thread_pool),
     n_files_(n_files),
+    max_size_(0),
+    cur_size_(0),
     chunks_started_(0),
     chunks_finished_(0)
 {
