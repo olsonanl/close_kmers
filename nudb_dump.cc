@@ -6,7 +6,13 @@
 
 int main(int argc, char **argv)
 {
-    std::string path = "/dev/shm/out9.dat";
+    if (argc != 2)
+    {
+	std::cerr << "Usage: nudb_dump ndb-file\n";
+	exit(1);
+    }
+    
+    std::string path = argv[1];
 
     auto cb = [](
 	void const* key,        // A pointer to the item key

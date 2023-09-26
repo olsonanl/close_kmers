@@ -1,18 +1,3 @@
-/*
- * Thoughts.
- *
- * We need function definitions for each sequence.
- *
- * Loading from a SEED, it makes sense to have separate files of fasta
- * protein data and annotation data.
- *
- * Loading from independent fasta, it makes sense to put the annotation
- * in the def line.
- *
- * Initial plan is to allow loading of annotation definitions id <tab> func,
- * then have annotations in a def line take precedence.
- */
- 
 
 #include <cmath>
 #include <array>
@@ -45,7 +30,7 @@
 #include "seed_utils.h"
 #include "operators.h"
 #include "fasta_parser.h"
-#include "kguts.h"
+#include "kmer_types_generic.h"
 
 #define TBB_PREVIEW_NUMA_SUPPORT 1
 
@@ -209,6 +194,10 @@ struct KmerSet
 inline std::ostream &operator<<(std::ostream &os, const KmerSet &ks)
 {
     os << "KmerSet: kmer=" << ks.kmer << " count=" << ks.count << "\n";
+    for (auto iter = ks.func_count.begin(); iter != ks.func_count.end(); iter++)
+    {
+	os << iter->first << "\t" << iter->second << "\n";
+    }
     return os;
 }
 
@@ -294,19 +283,30 @@ void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned int &next_sequ
 
     FunctionIndex function_index = fm.lookup_index(func);
 
-    if (function_index == UndefinedFunction)
+    if (false)
     {
-	function_index = fm.lookup_index("hypothetical protein");
 	if (function_index == UndefinedFunction)
 	{
-	    std::cerr << "No function defined for hypothetical protein\n";
-	    exit(1);
+	    function_index = fm.lookup_index("hypothetical protein");
+	    if (function_index == UndefinedFunction)
+	    {
+		std::cerr << "No function defined for hypothetical protein\n";
+		exit(1);
+	    }
 	}
     }
 
     // std::cout << "Load seq " << id << " '" << func << "' " << function_index << " id=" << seq_id <<  "\n";
+//    if (function_index == 19345)
+//    {
+//	std::cout << "FN 19345 " << id << " '" << func << "' " << function_index << " id=" << seq_id <<  "\n";
+//    }
+    // std::cout << "Load seq " << id << " '" << func << "' " << function_index << " id=" << seq_id <<  "\n";
     if (function_index == UndefinedFunction)
-	return;
+    {
+//	std::cout << "Skipping undef seq " << id << " '" << func << "' " << function_index << " id=" << seq_id <<  "\n";
+    	return;
+    }
 
     kmer_stats.seqs_with_func[function_index]++;
 
@@ -328,11 +328,23 @@ void load_sequence(FunctionMap &fm, KmerAttributeMap &m, unsigned int &next_sequ
 	}
 	if (ok)
 	{
+	    /*
+	    if ("PHSQRWTN" == kmer || function_index == 19345)
+	    {
+		std::cerr << kmer << " in " << id << " " << function_index << " " << seq_id << "\n";
+	    }
+	    */
 	    m.insert({kmer, { function_index, UndefinedOTU, n, seq_id, static_cast<unsigned int>(seq.length())}});
 	    // std::cout << kmer << " " << n << "\n";
 	}
 	else
 	{
+	    /*
+	    if ("PHSQRWTN" == kmer || function_index == 19345)
+	    {
+		std::cerr << kmer << " rejected from " << id << " " << function_index << " " << seq_id << "\n";
+	    }
+	    */
 	    // std::cout << "reject " << kmer << " " << n << "\n";
 	}
     }
@@ -410,6 +422,13 @@ void process_set(KmerSet &set)
 	}
     }
 
+    if ("PHSQRWTN" == set.kmer)
+    {
+	std::cerr << set;
+	std::cerr << "best=" << best_func_1 << " best2=" << best_func_2 << "\n";
+    }
+
+
     float thresh = float(set.count) * 0.8f;
     int best_count = best_count_1;
     FunctionIndex best_func = best_func_1;
@@ -460,7 +479,13 @@ void process_set(KmerSet &set)
     else
     {
 	if ((float) best_count < thresh)
+	{
+	    if ("PHSQRWTN" == set.kmer)
+	    {
+		std::cerr << "rejecting " << set.kmer << " best_count=" << best_count << " thresh=" << thresh << "\n";
+	    }
 	    return;
+	}
     }
 
     unsigned int seqs_containing_func = 0;
@@ -492,7 +517,7 @@ void process_set(KmerSet &set)
     kmer_stats.distinct_signatures++;
     kmer_stats.distinct_functions[best_func]++;
 
-    kept_kmers.push_back(KeptKmer { set.kmer, median_offset, best_func, UndefinedOTU,
+    kept_kmers.emplace_back(KeptKmer { set.kmer, median_offset, best_func, UndefinedOTU,
 	    (unsigned int) set.set.size(), seqs_containing_func, 0.0, mean, median, var });
 }
 
@@ -647,48 +672,6 @@ void write_function_index(const fs::path &dir, FunctionMap &fm)
     fm.write_function_index(dir);
 }
 
-
-KmerGuts *write_hashtable(const fs::path &dir, tbb::concurrent_vector<KeptKmer> &kmers)
-{
-    std::vector<unsigned long> primes {3769,6337,12791,24571,51043,101533,206933,400187,
-	    821999,2000003,4000037,8000009,16000057,32000011,
-	    64000031,128000003,248000009,508000037,1073741824,
-	    1400303159,2147483648,1190492993,3559786523,6461346257};
-
-    //
-    // find a hash table size appropriate for the number of kmers we have.
-    //
-    unsigned long hashtable_size = 0;
-    for (auto p: primes)
-    {
-	if (p > 3 * kmers.size())
-	{
-	    hashtable_size = p;
-	    break;
-	}
-    }
-    if (hashtable_size == 0)
-    {
-	std::cerr << "Cannot find prime for " << kmers.size() << "\n";
-	exit(1);
-    }
-    std::cerr << "Using hashtable size " << hashtable_size << " for " << kmers.size() << "\n";
-	
-    KmerGuts *kguts = new KmerGuts(dir.string(), hashtable_size);
-
-    for (auto k: kmers)
-    {
-	// std::cout << k << "\n";
-	kguts->insert_kmer(kguts->encoder_.encoded_aa_kmer(k.kmer),
-			  k.function_index, k.otu_index, k.median_offset, k.weight);
-    }
-    if (!dir.empty())
-    {
-	kguts->save_kmer_hash_table((dir / "kmer.table.mem_map").string());
-    }
-    return kguts;
-}
-
 void write_nudb_data(const std::string &nudb_file, tbb::concurrent_vector<KeptKmer> &kmers)
 {
     typedef NuDBKmerDb<8> KDB;
@@ -712,171 +695,6 @@ void write_nudb_data(const std::string &nudb_file, tbb::concurrent_vector<KeptKm
 //	if (!ec)
 //	    std::cerr << "insert error: " << ec.message() << "\n";
     }
-}
-
-struct RecallData
-{
-    std::string new_function;
-    std::string old_function;
-    float score;
-    float weighted_score;
-    float score_offset;
-};
-
-std::experimental::optional<RecallData> recall_sequence(FunctionMap &fm, KmerGuts *kguts,
-//		    fs::ofstream &calls_stream, fs::ofstream &new_stream,
-		    const std::string &id, const std::string &seq)
-{
-
-    if (id.empty())
-	return {};
-    typedef std::vector<KmerCall> call_vector_t;
-    std::shared_ptr<call_vector_t> calls_ = std::make_shared<call_vector_t>();
-    call_vector_t &calls = *calls_;
-
-    // std::cout << id << ":\n";
-    // std::cout << seq << "\n";
-
-    kguts->process_aa_seq(id, seq, calls_, 0, 0);
-
-    /*
-    for (auto x: *calls_)
-    {
-	std::cout << "  " << x << "\n";
-    }
-    */
-	    
-    FunctionIndex best_fi;
-    RecallData ret;
-    kguts->find_best_call(calls, best_fi, ret.new_function, ret.score, ret.weighted_score, ret.score_offset);
-
-    ret.old_function = fm.lookup_function(id);
-
-    return ret;
-}
-
-std::experimental::optional<RecallData> recall_sequence(FunctionMap &fm, NuDBKmerDb<K> *db,
-//		    fs::ofstream &calls_stream, fs::ofstream &new_stream,
-		    const std::string &id, const std::string &seq)
-{
-
-    if (id.empty())
-	return {};
-//    typedef std::vector<KmerCall> call_vector_t;
-
-    return {};
-#if 0
-    std::shared_ptr<call_vector_t> calls_ = std::make_shared<call_vector_t>();
-    call_vector_t &calls = *calls_;
-
-    // std::cout << id << ":\n";
-    // std::cout << seq << "\n";
-
-    kguts->process_aa_seq(id, seq, calls_, 0, 0);
-
-    /*
-    for (auto x: *calls_)
-    {
-	std::cout << "  " << x << "\n";
-    }
-    */
-	    
-    FunctionIndex best_fi;
-    RecallData ret;
-    kguts->find_best_call(calls, best_fi, ret.new_function, ret.score, ret.weighted_score, ret.score_offset);
-
-    ret.old_function = fm.lookup_function(id);
-
-    return ret;
-#endif
-}
-
-/*
- * Recall a fasta file using our just-computed signatures.
- *
- * calls_dir is where we write the new calls; new_dir is where we write
- * the changed annotationsl
- */
-template<typename Caller>
-void recall_fasta(FunctionMap &fm, const fs::path &file, Caller *caller,
-		  fs::path calls_dir, fs::path new_dir)
-{
-    fs::ifstream ifstr(file);
-
-    fs::path calls_path = calls_dir / file.filename();
-    fs::path new_path = new_dir / file.filename();
-
-    fs::ofstream calls_stream(calls_path);
-    fs::ofstream new_stream(new_path);
-
-    FastaParser parser;
-    
-    auto cb = [&fm, caller, &calls_stream, &new_stream](const std::string &id, const std::string &seq) {
-	auto res = recall_sequence(fm, caller, id, seq);
-	if (res)
-	{
-	    if (res->new_function != res->old_function)
-	    {
-		new_stream << id << "\t" << res->old_function << "\t" << res->new_function << "\n";
-	    }
-	
-	    calls_stream << id << "\t" << res->new_function << "\t" << res->score << "\t" << res->weighted_score << "\n";
-	}
-	return 0;
-    };
-	    
-    parser.set_callback(cb);
-
-    parser.parse(ifstr);
-    parser.parse_complete();
-}
-
-/*
- * Validate a fasta file using our just-computed signatures.
- *
- */
-void validate_fasta(FunctionMap &fm, const fs::path &file, KmerGuts *kguts,
-		    FunctionMap &correct_calls, bool verbose)
-{
-    fs::ifstream ifstr(file);
-
-    FastaParser parser;
-    int n_correct = 0, n_incorrect = 0, n_missing = 0;
-    int count = 0;
-    
-    auto cb = [&fm, kguts, &correct_calls, &n_correct, &n_incorrect, &n_missing, &count, verbose](const std::string &id, const std::string &seq) {
-	auto res = recall_sequence(fm, kguts, id, seq);
-	std::string correct_function = correct_calls.lookup_function(id);
-
-	count++;
-	
-	if (res)
-	{
-	    if (res->new_function == correct_function)
-	    {
-		n_correct++;
-	    }
-	    else
-	    {
-		if (verbose)
-		    std::cout << "incorrect\t" << id << "\t" << correct_function << "\t" << res->new_function << std::endl;
-		n_incorrect++;
-	    }
-	}
-	else
-	{
-	    if (!correct_function.empty())
-		n_missing++;
-	}
-	return 0;
-    };
-	    
-    parser.set_callback(cb);
-
-    parser.parse(ifstr);
-    parser.parse_complete();
-
-    std::cout << file << ": count=" << count << " correct=" << n_correct << " incorrect=" << n_incorrect << " missing=" << n_missing << std::endl;
 }
 
 
@@ -930,11 +748,6 @@ bool process_command_line_options(int argc, char *argv[],
 				  std::vector<std::string> &good_roles,
 				  fs::path &deleted_fids_file,
 				  int &min_reps_required,
-				  fs::path &recall_output_path,
-				  fs::path &validation_folder_path,
-				  bool &validation_verbose,
-				  int &recall_min_hits,
-				  int &recall_max_gap,
 				  fs::path &kmer_data_dir,
 				  fs::path &final_kmers,
 				  std::string &nudb_file,
@@ -950,12 +763,6 @@ bool process_command_line_options(int argc, char *argv[],
     std::vector<std::string> good_function_files;
     std::vector<std::string> good_role_files;
 
-    std::string recall_output;
-    std::string validation_folder;
-
-    recall_min_hits = 5;
-    recall_max_gap = 200;
-
     n_threads = 1;
 
     desc.add_options()
@@ -969,11 +776,6 @@ bool process_command_line_options(int argc, char *argv[],
 	("nudb-file", po::value<std::string>(&nudb_file), "Write saved kmers to this NuDB file base. Should be on a SSD drive.")
 	("min-reps-required", po::value<int>(&min_reps_required), "Minimum number of genomes a function must be seen in to be considered for kmers")
 	("final-kmers", po::value<fs::path>(&final_kmers), "Write final.kmers file to be consistent with km_build_Data")
-	("recall-output", po::value<std::string>(&recall_output), "Recall proteins and write output to this path")
-	("validation-folder", po::value<std::string>(&validation_folder), "Call proteins from this folder and write statistics")
-	("validation-verbose", po::bool_switch(&validation_verbose)->default_value(false), "Emit verbose output during validation")
-	("recall-min-hits", po::value<int>(&recall_min_hits), "min-hits parameter to use in recall")
-	("recall-max-gap", po::value<int>(&recall_max_gap), "max_gaps parameter to use in recall")
 	("n-threads", po::value<int>(&n_threads), "Number of threads to use")
 	("help,h", "show this help message");
 
@@ -1012,16 +814,6 @@ bool process_command_line_options(int argc, char *argv[],
     load_strings(good_function_files, good_functions);
     load_strings(good_role_files, good_roles);
 
-    if (!recall_output.empty())
-    {
-	recall_output_path = recall_output;
-    }
-    
-    if (!validation_folder.empty())
-    {
-	validation_folder_path = validation_folder;
-    }
-    
     return true;
 }
 
@@ -1041,18 +833,11 @@ int main(int argc, char *argv[])
     std::vector<std::string> good_functions;
     std::vector<std::string> good_roles;
 
-    fs::path recall_output_path;
     fs::path final_kmers;
     fs::path deleted_fids_file;
     fs::path kmer_data_dir;
 
-    fs::path validation_folder;
-    bool validation_verbose = false;
-
     int min_reps_required = 3;
-
-    int recall_min_hits;
-    int recall_max_gap;
     
     int n_threads;
 
@@ -1066,11 +851,6 @@ int main(int argc, char *argv[])
 				      good_roles,
 				      deleted_fids_file,
 				      min_reps_required,
-				      recall_output_path,
-				      validation_folder,
-				      validation_verbose,
-				      recall_min_hits,
-				      recall_max_gap,
 				      kmer_data_dir,
 				      final_kmers,
 				      nudb_file,
@@ -1096,46 +876,6 @@ int main(int argc, char *argv[])
 	
     }
 
-    /*
-     * If we are going to recall, make sure our output path is appropriate.
-     */
-    fs::path recall_calls_dir, recall_new_dir;
-    if (!recall_output_path.empty())
-    {
-	try {
-	    if (fs::is_directory(recall_output_path))
-	    {
-		// Ensure we have Calls and New folders.
-		recall_calls_dir = recall_output_path / "Calls";
-		recall_new_dir = recall_output_path / "New";
-		
-		if (!fs::is_directory(recall_calls_dir))
-		{
-		    if (!fs::create_directory(recall_calls_dir))
-		    {
-			std::cerr << "Error creating " << recall_calls_dir << "\n";
-		    }
-		}
-		if (!fs::is_directory(recall_new_dir))
-		{
-		    if (!fs::create_directory(recall_new_dir))
-		    {
-			std::cerr << "Error creating " << recall_new_dir << "\n";
-		    }
-		}
-		
-	    }
-	    else
-	    {
-		std::cerr << "Recall path " << recall_output_path << " does not exist\n";
-		exit(1);
-	    }
-	}
-	catch (fs::filesystem_error  &e)
-	{
-	    std::cerr << "error setting up recall output: " << e.what() << "\n";
-	}
-    }
 
     /*
      * validate our kmer_data_dir
@@ -1224,7 +964,7 @@ int main(int argc, char *argv[])
 			      for (size_t i = r.begin(); i != r.end(); ++i)
 			      {
 				  auto fasta = all_fasta_data[i];
-				  std::cout << "load file " << i << " " << fasta << "\n";
+				  // std::cout << "load file " << i << " " << fasta << "\n";
 				  load_fasta(fm, m, (unsigned) i, fasta, deleted_fids);
 			      }
 			  });
@@ -1277,145 +1017,12 @@ int main(int argc, char *argv[])
 	write_nudb_data(nudb_file, kept_kmers);
     }
     
-    /*
-     * Ick.
-     */
-    fs::path fidx = kmer_data_dir / "function.index";
-    // kguts->kmersH->function_array = kguts->load_functions(fidx.c_str(), &kguts->kmersH->function_count);
-#if 0
-    kguts->kmersH->function_array = fm.create_kg_function_array(&kguts->kmersH->function_count);
-    kguts->kmersH->otu_array = kguts->load_otus("/dev/null", &kguts->kmersH->otu_count);
-
-    kguts->min_hits = recall_min_hits;
-    kguts->max_gap = recall_max_gap;
-
-    KmerGuts *shared_kguts = kguts;
-
-#else
     NuDBKmerDb<K> db(nudb_file);
     db.open();
-#endif
 
-    if (!recall_output_path.empty())
-    {
-	size_t n = all_fasta_data.size();
-
-	if (n_threads >= 1)
-	{
-	    std::cerr << "starting recall of " << n << " genomes with " << n_threads << " threads\n";
-	    tbb::parallel_for(tbb::blocked_range<size_t>(0, n),
-			      [&fm,
-			       #if 0
-			       &shared_kguts,
-			       #else
-			       &db,
-			       #endif
-			       recall_calls_dir, recall_new_dir, all_fasta_data, kmer_data_dir,
-			       recall_min_hits, recall_max_gap, fidx](const tbb::blocked_range<size_t> &r) {
-
-				  //KmerGuts *kguts = new KmerGuts(dir, shared_kguts->image_);
-				  #if 0
-				  KmerGuts kguts(*shared_kguts);
-				  #endif
-				  //boost::thread_specific_ptr<KmerGuts> kguts;
-				  //kguts.reset(new KmerGuts(*shared_kguts));
-
-				  //kguts->min_hits = recall_min_hits;
-				  //kguts->max_gap = recall_max_gap;
-				  //kguts->kmersH->function_array = kguts->load_functions(fidx.c_str(), &kguts->kmersH->function_count);
-				  //kguts->kmersH->otu_array = kguts->load_otus("/dev/null", &kguts->kmersH->otu_count);
-				  
-				  std::cout << "Process block:";
-				  for(size_t i=r.begin(); i!=r.end(); ++i)
-				      std::cout << " " << i;
-				  std::cout << " on thread " << std::this_thread::get_id() << "\n";
-				  
-				  for(size_t i=r.begin(); i!=r.end(); ++i)
-				  {
-				      fs::path file = all_fasta_data[i];
-				      recall_fasta(fm, file, &db, recall_calls_dir, recall_new_dir);
-				  }
-			      });
-	}
-	else
-	{
-	    std::cerr << "starting recall of " << n << " genomes with single thread\n";
-	    for (auto file: all_fasta_data)
-	    {
-		//KmerGuts k(*kguts);
-		//KmerGuts &k = *kguts;
-		recall_fasta(fm, file, &db, recall_calls_dir, recall_new_dir);
-	    }
-	}
-    }
-
-#if 0
-    if (!validation_folder.empty())
-    {
-
-	kguts->min_hits = recall_min_hits;
-	kguts->max_gap = recall_max_gap;
-
-	KmerGuts *shared_kguts = kguts;
-
-	/*
-	 * The validation folder will contain a subdirectory
-	 * anno that holds the 2-column table of correct annotations (file per genome), and
-	 * seq that holds the fasta sequence data (file per genome)
-	 *
-	 * For each anno file, read the 2-column table and populate the FunctionMap
-	 * we're (mis)using for the id => correct function hash.
-	 *
-	 * Read the contents of the seq directory to obtain a list of files.
-	 * 
-	 * In parallel, recall and compute scores.
-	 *  
-	 */
-
-	std::vector<fs::path> seq_files;
-	FunctionMap correct_funcs;
-	
-	for (auto dit: fs::directory_iterator(validation_folder / "seq"))
-	{
-	    if (fs::is_regular_file(dit.path()))
-		seq_files.push_back(dit.path());
-	}
-	for (auto dit: fs::directory_iterator(validation_folder / "anno"))
-	{
-	    if (fs::is_regular_file(dit.path()))
-	    {
-		correct_funcs.load_id_assignments(dit.path());
-	    }
-	}
-
-	std::cerr << "starting call of " << seq_files.size() << " genomes with " << n_threads << " threads\n";
-	tbb::parallel_for(tbb::blocked_range<size_t>(0, seq_files.size()),
-			  [&fm, &shared_kguts, &seq_files, recall_min_hits, recall_max_gap, &correct_funcs, validation_verbose]
-			  (const tbb::blocked_range<size_t> &r) {
-
-			      KmerGuts kguts(*shared_kguts);
-			      
-			      std::cout << "Process block:";
-			      for(size_t i=r.begin(); i!=r.end(); ++i)
-				  std::cout << " " << i;
-			      std::cout << " on thread " << std::this_thread::get_id() << "\n";
-			      
-			      for(size_t i=r.begin(); i!=r.end(); ++i)
-			      {
-				  fs::path file = seq_files[i];
-				  std::cerr << "Would compute " << file << std::endl;
-				  validate_fasta(fm, file, &kguts, correct_funcs, validation_verbose);
-			      }
-			  });
-    }
-#endif
 
     std::cerr << "all done\n";
 
-/*
-    free(kguts->kmer_image_for_loading_);
-    delete kguts;
-*/
     show_ps();
     rejected_stream.close();
     kept_stream.close();

@@ -18,7 +18,7 @@ template <int K>
 class NuDBKmerDb
 {
 public:
-
+    static const int KmerSize = K;
     struct KData {
 	OTUIndex otu_index = UndefinedOTU;
 	unsigned short  avg_from_end = 0;
@@ -120,6 +120,21 @@ public:
 	    const KData *kdata = static_cast<const KData *>(buffer);
 	    cb(kdata);
 	}, ec);
+    }
+    template <typename CB>
+    void fetch(const key_type &key, CB cb, int &iec) {
+	nudb::error_code ec;
+	db_.fetch(key.data(), [&cb](void const *buffer,  std::size_t size) {
+	    if (size != sizeof(KData))
+	    {
+		std::cerr << "Invalid data size: " << size << " != " << sizeof(KData) << "\n";
+	    }
+	    assert(size == sizeof(KData));
+	    const KData *kdata = static_cast<const KData *>(buffer);
+	    cb(kdata);
+	}, ec);
+	// std::cerr << ec.message() << std::endl;
+	iec = ec.value();
     }
 
 private:

@@ -1,15 +1,16 @@
 #include "nudb_kmer_db.h"
-#include "kmer_nudb.h"
+#include "kmer_generic.h"
 #include "fasta_parser.h"
 #include <memory>
 
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
-#include <boost/math/statistics/linear_regression.hpp>
+//#include <boost/math/statistics/linear_regression.hpp>
 
 #include <stdexcept>
 
 namespace fs = boost::filesystem;
+using namespace KmerGenericNS;
 
 int main(int argc, char **argv)
 {
@@ -19,9 +20,11 @@ int main(int argc, char **argv)
 	exit(1);
     }
 
+    const int K = 8;
+
     std::string db_file = argv[1];
     std::string function_index_file = argv[2];
-    typedef NuDBKmerDb<8> KDB;
+    typedef NuDBKmerDb<K> KDB;
     KDB db(db_file);
 
     if (!db.exists())
@@ -32,7 +35,8 @@ int main(int argc, char **argv)
     }
     db.open();
 
-    KmerNudb kmer_nudb(db, function_index_file);
+//    KmerNudb kmer_nudb(db, function_index_file);
+    KmerGeneric<NuDBKmerDb<K>> kmer_nudb(db, function_index_file);
 
     try {
 	FastaParser parser;
@@ -44,7 +48,7 @@ int main(int argc, char **argv)
 	    // auto hits = std::make_shared<std::vector<hit_in_sequence_t>>();
 	    auto ostats = std::make_shared<KmerOtuStats>();
 	
-	    auto hit_cb = [ slen, &kmer_nudb](const hit_in_sequence_t &hit) {
+	    auto hit_cb = [ slen, &kmer_nudb](const hit_in_sequence_t<NuDBKmerDb<K>> &hit) {
 		auto kd = hit.kdata;
 		if (false)
 		{

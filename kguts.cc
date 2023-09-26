@@ -647,7 +647,7 @@ kmer_memory_image_t *KmerGuts::load_raw_kmers(char *file,unsigned long long num_
 		kmer_string,&end_off,&fI,&f_wt,&oI) >= 4) {
       if (strlen(kmer_string) != KMER_SIZE)
       {
-	  fprintf(stderr, "Invalid kmer read (size=%d != %d)\n", strlen(kmer_string), KMER_SIZE);
+	  fprintf(stderr, "Invalid kmer read (size=%ld != %d)\n", strlen(kmer_string), KMER_SIZE);
 	  exit(1);
       }
 

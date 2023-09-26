@@ -98,6 +98,43 @@ public:
 
 };
 
+inline std::ostream &operator<<(std::ostream &os, const KmerCall &c)
+{
+    os << "KmerCall(" << c.start << "-" << c.end << ": " << c.count << ", " << c.function_index
+       << ", " << c.weighted_hits
+       << ", " << c.r2
+       << ")";
+    return os;
+}
+
+template <int N, typename F>
+void for_each_kmer(const std::string &str, F cb) {
+    const char *ptr = str.c_str();
+    const char *end = ptr  + str.length();
+    const char *last_kmer= end - N;
+
+    const char *next_ambig = std::find_if(ptr, end, [](char c) -> bool { return c == '*' || c == 'X'; });
+    // std::cerr << "next_ambig=" << next_ambig << "\n";
+    std::array<char, N> kmer;
+    while (ptr <= last_kmer)
+    {
+	// std::cerr << "ptr=" << ptr << "\n";
+	const char *kend = ptr + N;
+	// std::cerr << "kend=" << kend << "\n";
+	if (next_ambig != end && kend >= next_ambig)
+	{
+	    // std::cerr << "hit abmig\n";
+	    ptr = next_ambig + 1;
+	    next_ambig = std::find_if(ptr, end, [](char c) { return c == '*' || c == 'X'; });
+	    continue;
+	}
+	std::copy(ptr, kend, kmer.data());
+	// std::cerr << "cb " << kmer << "\n";
+	cb(kmer, ptr - str.c_str());
+	ptr++;
+    }
+}
+
 class KmerOtuStats
 {
 public:
@@ -191,5 +228,16 @@ inline std::ostream& operator<<(std::ostream& o, const std::array<T, N>& arr)
     return o;
 }
 
+template <std::size_t N>
+inline bool operator==(const std::string &str, const std::array<char, N> &arr)
+{
+    return false;
+}
+
+template <std::size_t N>
+inline bool operator==(const std::array<char, N> &arr, const std::string &str)
+{
+    return return str == arr;
+}
 
 #endif /* _kmer_types_h */
