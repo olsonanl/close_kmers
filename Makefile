@@ -6,15 +6,23 @@ BUILD_TOOLS = /disks/patric-common/runtime/gcc-9.3.0
 PATH := $(XBUILD_TOOLS)/bin:$(PATH)
 export PATH
 
+USE_SYSTEM_BOOST = 0
+
 #CXX = /opt/rh/devtoolset-2/root/usr/bin/g++
 #CXX = $(BUILD_TOOLS)/bin/g++
 CXX = g++
-#BOOST = $(BUILD_TOOLS)
+
+ifeq ($(USE_SYSTEM_BOOST),0)
 BOOST = /home/olson/P3/boost/1.83
+#BOOST = $(BUILD_TOOLS)
 #BOOST = /scratch/olson/boost
 #STDCPP = -std=c++14 
+INC = -I$(BOOST)/include 
+endif
+
 STDCPP = -std=c++1y
 THREADLIB = -lpthread -lrt
+
 
 CXX_LDFLAGS = -Wl,-rpath,$(BUILD_TOOLS)/lib64
 
@@ -89,15 +97,16 @@ PROFILER_DIR = /scratch/olson/gperftools
 #PROFILER_LIB = -L$(PROFILER_DIR)/lib -lprofiler
 #PROFILER_INC = -DGPROFILER -I$(PROFILER_DIR)/include
 
-INC = -I$(BOOST)/include 
 
 KMC_DIR = ../KMC/kmc_api
 KMC_LIB = $(KMC_DIR)/*.o
 KMC_INC = -I$(KMC_DIR)
 
+ifeq ($(USE_SYSTEM_BOOST),0)
 LOG4CPP_DIR = /home/olson/P3/install
 LOG4CPP_LIB = -L$(LOG4CPP_DIR)/lib -llog4cxx -Wl,-rpath=$(LOG4CPP_DIR)/lib
 LOG4CPP_INC = -I$(LOG4CPP_DIR)/include
+endif
 
 USE_TBB = 1
 USE_NUMA = 0
@@ -149,7 +158,13 @@ CFLAGS = $(INC) $(OPT) $(PROFILER_INC) $(KMC_INC) -Wconversion -Wall
 # LDFLAGS  = -static
 LDFLAGS = $(TBB_LDFLAGS) $(CXX_LDFLAGS) $(PROFILE)
 
-LIBS = $(BOOST)/lib/libboost_system.a \
+ifneq ($(USE_SYSTEM_BOOST),0)
+BOOST_LIBS = -lboost_system -lboost_log -lboost_filesystem -lboost_timer -lboost_chrono \
+	-lboost_iostreams -lboost_regex -lboost_thread -lboost_program_options -lboost_system
+
+else
+
+BOOST_LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BOOST)/lib/libboost_log.a \
 	$(BOOST)/lib/libboost_filesystem.a \
 	$(BOOST)/lib/libboost_timer.a \
@@ -158,7 +173,10 @@ LIBS = $(BOOST)/lib/libboost_system.a \
 	$(BOOST)/lib/libboost_regex.a \
 	$(BOOST)/lib/libboost_thread.a \
 	$(BOOST)/lib/libboost_program_options.a \
-	$(BOOST)/lib/libboost_system.a \
+	$(BOOST)/lib/libboost_system.a 
+
+endif
+LIBS = $(BOOST_LIBS) \
 	$(THREADLIB) \
 	$(PROFILER_LIB) \
 	$(BLCR_LIB) \
