@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include <atomic>
 #include <boost/filesystem.hpp>
 #include "tbb/concurrent_unordered_map.h"
 #include "tbb/concurrent_unordered_set.h"
@@ -201,7 +202,7 @@ public:
     string_map_t old_fam_used_;
     string_map_t new_fam_name_;
 
-    tbb::atomic<int> new_idx_;
+    std::atomic<int> new_idx_;
 
     void logger_main();
     void start_logger();

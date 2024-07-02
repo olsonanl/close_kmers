@@ -12,6 +12,7 @@
 #include <boost/iostreams/filtering_streambuf.hpp>
 #include <boost/iostreams/copy.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
+#include <boost/container_hash/hash.hpp>
 
 #include "parallel_read.h"
 

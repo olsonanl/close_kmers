@@ -27,6 +27,7 @@
 #include <memory>
 #include <experimental/optional>
 #include <unistd.h>
+#include <atomic>
 
 #include <boost/regex.hpp>
 #include <boost/filesystem.hpp>
@@ -126,7 +127,7 @@ inline std::ostream &operator<<(std::ostream &os, const Kmer &k)
 
 struct KmerStatistics
 {
-    tbb::atomic<int> distinct_signatures = 0;
+    std::atomic<int> distinct_signatures = 0;
     tbb::concurrent_unordered_map<int, int> distinct_functions;
     tbb::concurrent_unordered_map<FunctionIndex, int> seqs_with_func;
     tbb::concurrent_unordered_set<unsigned int> seqs_with_a_signature;

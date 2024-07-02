@@ -3,6 +3,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
+#include <atomic>
 
 #include "kmer.h"
 #include "threadpool.h"
@@ -78,8 +79,8 @@ public:
     size_t max_size_;
     size_t cur_size_;
     boost::mutex dbg_mut_;
-    tbb::atomic<int> chunks_started_;
-    tbb::atomic<int> chunks_finished_;
+    std::atomic<int> chunks_started_;
+    std::atomic<int> chunks_finished_;
     int on_parsed_seq(const std::string &id, const std::string &seq);
     void thread_load(std::shared_ptr<seq_list_t> sent_work, int count);
     void on_hit(const KmerGuts::hit_in_sequence_t &hit, KmerPegMapping::encoded_id_t &enc_id, size_t seq_len);

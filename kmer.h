@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include <vector>
 #include <array>
+#include <atomic>
 
 #ifdef USE_TBB
 #include "tbb/concurrent_unordered_map.h"
@@ -21,6 +22,19 @@
 
 #include <boost/thread/mutex.hpp>
 #include <boost/program_options.hpp>
+#include <boost/container_hash/hash.hpp>
+
+template <>
+struct std::hash<std::pair<std::string, std::string>>
+{
+    std::size_t operator()(const std::pair<std::string, std::string>& s) const noexcept
+    {
+        std::size_t h1 = std::hash<std::string>{}(s.first);
+        std::size_t h2 = std::hash<std::string>{}(s.second);
+        return h1 ^ (h2 << 1); // or use boost::hash_combine
+    }
+};
+
 
 class KmerPegMapping
 {
@@ -104,7 +118,7 @@ public:
     tbb::spin_mutex tmtx_;
 
     // Peg ID mapping
-    tbb::atomic<encoded_id_t> next_peg_id_;
+    std::atomic<encoded_id_t> next_peg_id_;
     peg_to_id_map_t peg_to_id_;
     id_to_peg_map_t id_to_peg_;
 
@@ -152,7 +166,7 @@ public:
 
     std::string decode_id(encoded_id_t id);
 
-    tbb::atomic<unsigned long> kcount_;
+    std::atomic<unsigned long> kcount_;
     unsigned int next_genome_id_;
 
     void dump_sizes(std::ostream &os);

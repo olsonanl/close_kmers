@@ -17,7 +17,6 @@
 #include "kmer_inserter.h"
 #include "krequest2.h"
 #include "threadpool.h"
-#include "tbb/atomic.h"
 #include "family_reps.h"
 
 #include "nr_loader.h"
