@@ -224,7 +224,7 @@ kc: kc.o kmer.o kserver.o krequest.o
 kser: kser.o kmer.o kserver.o kguts.o \
 	fasta_parser.o krequest2.o add_request.o threadpool.o matrix_request.o query_request.o lookup_request.o \
 	fq_process_request.o fastq_parser.o zlib_support.o dna_seq.o trans_table.o family_mapper.o \
-	md5.o kmer_image.o numa.o kmer_inserter.o family_reps.o nr_loader.o kmer_encoder.o
+	kmer_image.o numa.o kmer_inserter.o family_reps.o nr_loader.o kmer_encoder.o
 	$(CXX) $(LDFLAGS) $(OPT) -o kser $^ $(LIBS) 
 
 tst_family_reps: family_reps.o tst_family_reps.o
