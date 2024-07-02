@@ -345,7 +345,7 @@ inline void parse_value(const std::string &raw, bool invert, ItemType &val)
     val = std::stoi(raw);
 }
 
-inline bool parse_value(const std::string &raw, bool invert, bool &bval)
+inline void parse_value(const std::string &raw, bool invert, bool &bval)
 {
     int val = std::stoi(raw);
 
@@ -355,7 +355,7 @@ inline bool parse_value(const std::string &raw, bool invert, bool &bval)
 }
 
 
-inline bool parse_value(int raw, bool invert, bool &bval)
+inline void parse_value(int raw, bool invert, bool &bval)
 {
     bval = raw ? 1 : 0;
     if (invert)
