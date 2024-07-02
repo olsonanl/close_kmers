@@ -3,7 +3,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <fstream>

@@ -1,7 +1,7 @@
 #include "krequest2.h"
 #include <iostream>
 #include <sstream>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp> 
 #include <boost/regex.hpp>
 #include <boost/algorithm/string.hpp>
 #include <algorithm>

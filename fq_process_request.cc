@@ -4,7 +4,7 @@
 #include <string>
 #include <memory>
 
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/core/demangle.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/buffers_iterator.hpp>

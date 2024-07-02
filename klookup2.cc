@@ -6,7 +6,7 @@
 #include <string>
 #include <memory>
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/filesystem.hpp>
 
 #include "klookup2.h"
