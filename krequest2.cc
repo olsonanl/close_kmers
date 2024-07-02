@@ -48,7 +48,7 @@ KmerRequest2::KmerRequest2(std::shared_ptr<KmerRequestServer> server,
 
 KmerRequest2::~KmerRequest2()
 {
-//     std::cerr << "destroy krequest2 " << this << "\n";
+    // std::cerr << "destroy krequest2 " << this << "\n";
 }
 			   
 /*
@@ -59,7 +59,7 @@ KmerRequest2::~KmerRequest2()
  */
 void KmerRequest2::do_read()
 {
-    // std::cerr << "do_read " << this << "\n";
+    // std::cerr << "do_read " << this << " count=" <<  shared_from_this().use_count() << "\n";
     boost::asio::async_read_until(socket_, request_, "\n",
 				  boost::bind(&KmerRequest2::read_initial_line, this,
 					      boost::asio::placeholders::error,
@@ -513,13 +513,18 @@ void KmerRequest2::respond(int code, const std::string &status, const std::strin
     auto obj = shared_from_this();
     boost::asio::async_write(socket_, bufs,
 			     [obj, on_done](const boost::system::error_code &err, const long unsigned int &bytes){
-				 // std::cerr << "write all finished\n";
 				 obj->exit_request();
+				 std::cerr << "write all finished count=" << obj.use_count() << "\n";
 				 on_done();
 			     });
 }
 
 void KmerRequest2::exit_request()
 {
-    server_->deactivate(shared_from_this());
+    auto shptr = shared_from_this();
+    std::cerr << "exit_request " << shptr.use_count() << "\n";
+    server_->deactivate(shptr);
+    active_request_ = 0;
+    std::cerr << "exit_request after deactivate " << shptr.use_count() << "\n";
+    //server_->deactivate(shared_from_this());
 }

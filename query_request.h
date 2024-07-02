@@ -11,7 +11,7 @@ class QueryRequest : public ComputeRequest
 {
 public:
     QueryRequest(std::shared_ptr<KmerRequest2> owner, size_t content_length, bool chunked = false);
-    ~QueryRequest() { std::cerr << "Destroy queryrequest " << this << "\n"; }
+    ~QueryRequest() { /* std::cerr << "Destroy queryrequest " << this << "\n"; */ }
     void run();
 
 private:

@@ -164,11 +164,11 @@ void KmerRequestServer::startup()
 void KmerRequestServer::do_accept2()
 {
     std::shared_ptr<KmerRequest2> r = std::make_shared<KmerRequest2>(shared_from_this(), io_service_, mapping_map_, thread_pool_);
-    // std::cerr << "create " << r << "\n";
+    // std::cerr << "create " << r << " count=" << r.use_count() << "\n";
     acceptor_.async_accept(r->socket(),
 			   boost::bind(&KmerRequestServer::on_accept2, this,
 				       boost::asio::placeholders::error, r));
-    //std::cerr << "leaving do_accept2 r use count=" << r.use_count() << "\n";
+    // std::cerr << "leaving do_accept2 r use count=" << r.use_count() << "\n";
 }
 
 void KmerRequestServer::on_accept2(boost::system::error_code ec, std::shared_ptr<KmerRequest2> r)

@@ -7,8 +7,10 @@ PATH := $(XBUILD_TOOLS)/bin:$(PATH)
 export PATH
 
 #CXX = /opt/rh/devtoolset-2/root/usr/bin/g++
-CXX = $(BUILD_TOOLS)/bin/g++
-BOOST = $(BUILD_TOOLS)
+#CXX = $(BUILD_TOOLS)/bin/g++
+CXX = g++
+#BOOST = $(BUILD_TOOLS)
+BOOST = /home/olson/P3/boost/1.83
 #BOOST = /scratch/olson/boost
 #STDCPP = -std=c++14 
 STDCPP = -std=c++1y
@@ -25,7 +27,7 @@ endif
 
 default: kser
 
-BUILD_DEBUG = 1
+BUILD_DEBUG = 0
 
 ifeq ($(BUILD_DEBUG),1)
 OPT = -g -Wall

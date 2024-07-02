@@ -31,6 +31,8 @@ public:
 		      std::shared_ptr<ThreadPool> thread_pool,
 		      bool family_mode = false);
 
+    ~KmerRequestServer() { std::cerr << "Shutting down KmerRequestServer " << this << "\n"; }
+
     void load_families_nr(const std::string &file);
     void startup();
     void deactivate(std::shared_ptr<KmerRequest2> x);

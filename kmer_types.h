@@ -6,6 +6,7 @@
 #include <vector>
 #include <algorithm>
 #include <cstdio>
+#include <iostream>
 
 /**
  * Function indexes are use to reference the entries in function.index
